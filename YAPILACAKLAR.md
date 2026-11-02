@@ -4,6 +4,13 @@ Durum: analiz kısmı gerçek bir FACEIT demosunda doğrulandı. Kayıt kısmı 
 
 ## 0. Bu bilgisayardan taşı
 
+En kolay yol: GitHub'dan çek (private depo, `rose-omer` hesabıyla giriş gerekir).
+```bat
+git clone https://github.com/rose-omer/cs-clip.git cs-klip
+```
+Git yoksa: GitHub → cs-clip → Code → Download ZIP.
+
+Diğer yol:
 - [ ] `cs-klip` klasörünü kopyala (USB, Drive ya da zip). Şunları **alma**: `.venv`, `demos`, `klipler`, `__pycache__`, `.pytest_cache`.
   Zip için (PowerShell, `cs-klip`in bir üst klasöründe):
   ```powershell
