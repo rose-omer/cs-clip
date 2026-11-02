@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+demos/
+klipler/
+ayarlar.json
+konsol.log
+*.dem
+*.dem.zst
+*.dem.gz
+*.dem.bz2
+*.highlights.json
