@@ -68,3 +68,29 @@ def find_csgo_dir(root: Path | None = None) -> Path | None:
         if (lib / CS2_SUBDIR).is_dir():
             return lib / CS2_SUBDIR
     return None
+
+
+def demo_files(demo: Path) -> list[Path]:
+    """Bir demoya ait dosyalar: açılmış .dem, sıkıştırılmış hâli ve highlight JSON'u."""
+    demo = Path(demo)
+    base = demo.with_suffix("")  # mac.dem -> mac
+    names = [demo.name, *(base.name + ".dem" + s for s in _OPENERS), base.name + ".highlights.json"]
+    return [p for n in dict.fromkeys(names) if (p := demo.parent / n).exists()]
+
+
+def to_recycle_bin(paths: list[Path]) -> bool:
+    """Dosyaları Geri Dönüşüm Kutusu'na taşır (kalıcı silmez). Yalnız Windows."""
+    paths = [Path(p).resolve() for p in paths if Path(p).exists()]
+    if not paths or sys.platform != "win32":
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    class SHFILEOPSTRUCTW(ctypes.Structure):
+        _fields_ = [("hwnd", wintypes.HWND), ("wFunc", wintypes.UINT), ("pFrom", wintypes.LPCWSTR),
+                    ("pTo", wintypes.LPCWSTR), ("fFlags", ctypes.c_ushort), ("fAnyOperationsAborted", wintypes.BOOL),
+                    ("hNameMappings", ctypes.c_void_p), ("lpszProgressTitle", wintypes.LPCWSTR)]
+
+    fo_delete, allow_undo, no_ui = 3, 0x40, 0x10 | 0x04 | 0x400  # NOCONFIRMATION | SILENT | NOERRORUI
+    op = SHFILEOPSTRUCTW(wFunc=fo_delete, pFrom="\0".join(map(str, paths)) + "\0", fFlags=allow_undo | no_ui)
+    return ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op)) == 0 and not op.fAnyOperationsAborted
