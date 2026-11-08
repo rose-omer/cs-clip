@@ -73,6 +73,7 @@ def video_args(
         "--start-seconds-before", str(pre), "--end-seconds-after", str(post),
         "--no-concatenate-sequences", "--recording-system", "CS", "--close-game-after-recording",
         "--show-only-death-notices" if clean_hud else "--no-show-only-death-notices",
+        "--no-player-voices",  # sesli sohbet kliplere girmesin
     ]
 
 
@@ -83,6 +84,7 @@ def segment_args(csdm: Path, demo: Path, steamid: str, start: int, end: int, cle
         "--focus-player", str(steamid),
         "--no-concatenate-sequences", "--recording-system", "CS", "--close-game-after-recording",
         "--show-only-death-notices" if clean_hud else "--no-show-only-death-notices",
+        "--no-player-voices",  # sesli sohbet kliplere girmesin
     ]
 
 
