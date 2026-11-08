@@ -22,7 +22,7 @@
    "tarih": "2026-11-06T21:42:00",
    "boyut_mb": 238.7,
    "analiz_edildi": true,
-   "klip_sayisi": 0
+   "klip_sayisi": 2
   },
   {
    "id": "1-c41a9e07-7b3f-45d1-8e22-91f0b5d6ac48-1-1",
@@ -1391,7 +1391,7 @@
       "m4a1_silencer"
      ],
      "saniye": 15,
-     "klip": null
+     "klip": "/klip/mirage_0b7e33a9_R19_4K_3-HS_hızlı.mp4"
     },
     {
      "round": 2,
@@ -1406,7 +1406,7 @@
       "galilar"
      ],
      "saniye": 18,
-     "klip": null
+     "klip": "/klip/mirage_0b7e33a9_R02_3K_3-HS.mp4"
     },
     {
      "round": 8,
@@ -1535,5 +1535,145 @@
     "satirlar": []
    }
   }
- }
+ },
+ "en_iyi_ek": [
+  {
+   "ad": "ancient_e3c103b2_R11_1v3-clutch_4K_1-HS.mp4",
+   "klip": "/klip/ancient_e3c103b2_R11_1v3-clutch_4K_1-HS.mp4",
+   "harita": "ancient",
+   "kod": "e3c103b2",
+   "round": 11,
+   "etiketler": [
+    "1v3 clutch",
+    "4K",
+    "1 HS"
+   ],
+   "silahlar": [
+    "m4a1_silencer",
+    "hegrenade"
+   ],
+   "skor": 17.5,
+   "tahmini": false,
+   "demo": null,
+   "tarih": "2026-10-28T20:14:00",
+   "boyut_mb": 30.9,
+   "saniye": 19
+  },
+  {
+   "ad": "ancient_e3c103b2_R04_3K_2-HS.mp4",
+   "klip": "/klip/ancient_e3c103b2_R04_3K_2-HS.mp4",
+   "harita": "ancient",
+   "kod": "e3c103b2",
+   "round": 4,
+   "etiketler": [
+    "3K",
+    "2 HS"
+   ],
+   "silahlar": [
+    "ak47"
+   ],
+   "skor": 7.5,
+   "tahmini": false,
+   "demo": null,
+   "tarih": "2026-10-28T20:14:00",
+   "boyut_mb": 24.2,
+   "saniye": 14
+  },
+  {
+   "ad": "ancient_e3c103b2_R20_2K_1-HS.mp4",
+   "klip": "/klip/ancient_e3c103b2_R20_2K_1-HS.mp4",
+   "harita": "ancient",
+   "kod": "e3c103b2",
+   "round": 20,
+   "etiketler": [
+    "2K",
+    "1 HS"
+   ],
+   "silahlar": [
+    "famas"
+   ],
+   "skor": 4.0,
+   "tahmini": false,
+   "demo": null,
+   "tarih": "2026-10-28T20:14:00",
+   "boyut_mb": 18.6,
+   "saniye": 11
+  },
+  {
+   "ad": "nuke_7f21aa90_R09_ACE.mp4",
+   "klip": "/klip/nuke_7f21aa90_R09_ACE.mp4",
+   "harita": "nuke",
+   "kod": "7f21aa90",
+   "round": 9,
+   "etiketler": [
+    "ACE"
+   ],
+   "silahlar": [],
+   "skor": 15.0,
+   "tahmini": true,
+   "demo": null,
+   "tarih": "2026-10-19T22:31:00",
+   "boyut_mb": 36.4,
+   "saniye": 22
+  },
+  {
+   "ad": "nuke_7f21aa90_R22_1v2-clutch.mp4",
+   "klip": "/klip/nuke_7f21aa90_R22_1v2-clutch.mp4",
+   "harita": "nuke",
+   "kod": "7f21aa90",
+   "round": 22,
+   "etiketler": [
+    "1v2 clutch"
+   ],
+   "silahlar": [],
+   "skor": 6.5,
+   "tahmini": true,
+   "demo": null,
+   "tarih": "2026-10-19T22:31:00",
+   "boyut_mb": 21.7,
+   "saniye": 16
+  },
+  {
+   "ad": "dust2_a5c90e17_R03_3K_3-HS_hızlı.mp4",
+   "klip": "/klip/dust2_a5c90e17_R03_3K_3-HS_hızlı.mp4",
+   "harita": "dust2",
+   "kod": "a5c90e17",
+   "round": 3,
+   "etiketler": [
+    "3K",
+    "3 HS",
+    "hızlı"
+   ],
+   "silahlar": [
+    "deagle"
+   ],
+   "skor": 9.0,
+   "tahmini": false,
+   "demo": null,
+   "tarih": "2026-10-24T18:02:00",
+   "boyut_mb": 19.8,
+   "saniye": 12
+  },
+  {
+   "ad": "dust2_a5c90e17_R14_2K_smoke-arkası.mp4",
+   "klip": "/klip/dust2_a5c90e17_R14_2K_smoke-arkası.mp4",
+   "harita": "dust2",
+   "kod": "a5c90e17",
+   "round": 14,
+   "etiketler": [
+    "2K",
+    "smoke arkası"
+   ],
+   "silahlar": [
+    "awp"
+   ],
+   "skor": 4.5,
+   "tahmini": false,
+   "demo": null,
+   "tarih": "2026-10-24T18:02:00",
+   "boyut_mb": 17.1,
+   "saniye": 10
+  }
+ ],
+ "en_iyi_montaj": null
 }

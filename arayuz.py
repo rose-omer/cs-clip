@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from datetime import datetime
 from http import HTTPStatus
@@ -19,12 +20,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+import eniyi
+import render
 from analyze import analyze, save_json
 from config import load_config
 from demofile import find_csgo_dir, open_demo
 from klip import DEMO_SUFFIXES, clip_prefix
 from onarim import is_repaired_copy
-from kontrol import preflight
+from kontrol import find_ffmpeg, preflight
 from render import clip_seconds, select_clips
 
 ROOT = Path(__file__).resolve().parent
@@ -55,6 +58,7 @@ class App:
         self.locks: dict[str, threading.Lock] = {}
         self.lock = threading.Lock()
         self.job = {"durum": "bos", "mesaj": "", "satirlar": [], "demo": None}
+        self.montage_lock = threading.Lock()
 
     # --- demolar ---
     def demos(self) -> dict[str, Path]:
@@ -141,6 +145,55 @@ class App:
         job = dict(self.job) if self.job["demo"] == did else {"durum": "bos", "mesaj": "", "satirlar": []}
         job.pop("demo", None)
         return {"highlightlar": rows, "kayit": job}
+
+    # --- en iyi klipler ---
+    def best_clips(self) -> list[dict]:
+        """Klipler skora göre; demosu ve highlights.json'u duranlar gerçek puanla (analiz başlatılmaz)."""
+        by_code = {}
+        for did, p in self.demos().items():
+            by_code.setdefault(match_code(did), (did, p.parent / f"{did}.highlights.json"))
+        return eniyi.best_clips(self.out_dir, by_code)
+
+    def best(self) -> dict:
+        return {"klipler": self.best_clips(), "montaj": eniyi.montage_info(self.out_dir)}
+
+    def best_montage(self, count: int) -> dict:
+        if not self.montage_lock.acquire(blocking=False):
+            raise ApiError(HTTPStatus.CONFLICT, "Montaj sürüyor.")
+        try:
+            clips = self.best_clips()[:count]
+            if not clips:
+                raise ApiError(HTTPStatus.CONFLICT, "Montaj için klip yok; önce klip kaydedin.")
+            ffmpeg = find_ffmpeg(self.cfg["ffmpeg_yolu"])
+            if ffmpeg is None:
+                raise ApiError(HTTPStatus.CONFLICT,
+                               "Montaj için ffmpeg bulunamadı (winget install Gyan.FFmpeg ya da ayarlarda ffmpeg_yolu).")
+            out = self.out_dir / eniyi.MONTAGE_NAME
+            part = out.with_name(out.stem + ".part.mp4")  # oynatılan montaj yarım dosyayla bozulmasın
+            try:
+                render.make_montage([self.out_dir / c["ad"] for c in clips], part, ffmpeg)
+                if not part.is_file():
+                    raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, "Montaj üretilemedi.")
+                for attempt in range(10):  # Windows: oynatılırken dosya kısa süre kilitli olabilir
+                    try:
+                        part.replace(out)
+                        break
+                    except PermissionError:
+                        if attempt == 9:
+                            raise ApiError(HTTPStatus.CONFLICT,
+                                           "Montaj dosyası kullanımda (oynatılıyor olabilir); videoyu kapatıp tekrar deneyin.")
+                        time.sleep(0.3)
+            except subprocess.CalledProcessError as e:
+                raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, f"ffmpeg montajı birleştiremedi (çıkış kodu {e.returncode}).")
+            finally:
+                part.unlink(missing_ok=True)
+            (self.out_dir / eniyi.MONTAGE_META).write_text(
+                json.dumps({"adet": len(clips), "klipler": [c["ad"] for c in clips]}, ensure_ascii=False, indent=2),
+                encoding="utf-8")
+            info = eniyi.montage_info(self.out_dir)
+            return {"klip": info["klip"], "adet": len(clips), "boyut_mb": info["boyut_mb"], "tarih": info["tarih"]}
+        finally:
+            self.montage_lock.release()
 
     # --- kayıt ---
     def start_recording(self, did: str, best: int) -> dict:
@@ -238,6 +291,8 @@ def make_handler(app: App):
                 return self.handle_api(check)
             if path == "/api/demolar":
                 return self.handle_api(app.list_demos)
+            if path == "/api/en-iyi":
+                return self.handle_api(app.best)
             if m := re.fullmatch(r"/api/demo/([^/]+)/klipler", path):
                 return self.handle_api(lambda: app.clips(m.group(1)))
             if m := re.fullmatch(r"/api/demo/([^/]+)", path):
@@ -261,6 +316,17 @@ def make_handler(app: App):
                         raise ApiError(HTTPStatus.BAD_REQUEST, "en_iyi sayı olmalı.")
                     return app.start_recording(m.group(1), best)
                 return self.handle_api(start)
+            if path == "/api/en-iyi/montaj":
+                def montage():
+                    try:
+                        data = json.loads(body or b"{}")
+                    except ValueError:
+                        data = None
+                    count = eniyi.parse_count(data)
+                    if count is None:
+                        raise ApiError(HTTPStatus.BAD_REQUEST, f"adet 1 ile {eniyi.MAX_COUNT} arasında bir sayı olmalı.")
+                    return app.best_montage(count)
+                return self.handle_api(montage)
             self.send_json({"hata": "Bulunamadı."}, HTTPStatus.NOT_FOUND)
 
         def send_file(self, base: Path, rel: str):
