@@ -1,7 +1,7 @@
 """cs-klip: demo -> highlight -> .mp4 klipler.
 
 Kullanım:
-  python klip.py <demo veya klasör> [--sadece-analiz] [--prova] [--en-iyi N] [--temizle]
+  python klip.py <demo veya klasör> [--oyuncu AD|STEAMID] [--sadece-analiz] [--prova] [--en-iyi N] [--temizle]
   python klip.py --kontrol
 
 Demo .dem, .dem.zst, .dem.gz ya da .dem.bz2 olabilir. Klasör verilirse içindeki tüm demolar işlenir.
@@ -12,7 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from analyze import analyze, print_report, save_json
+from analyze import analyze_player, player_tag, print_report, save_player
 from config import load_config
 from demofile import demo_files, find_csgo_dir, open_demo, to_recycle_bin
 from kontrol import demo_in_db, preflight
@@ -70,7 +70,8 @@ def main() -> None:
     ap.add_argument("--kontrol", action="store_true", help="yalnız kayıt öncesi kontrolleri çalıştır")
     ap.add_argument("--temizle", action="store_true", help="kaydı biten demoları Geri Dönüşüm Kutusu'na taşı")
     ap.add_argument("--ayarlar", type=Path, default=Path(__file__).with_name("ayarlar.json"))
-    ap.add_argument("--oyuncu", help="ayarlar.json'daki oyuncuyu geçersiz kılar")
+    ap.add_argument("--oyuncu", help="ad ya da SteamID64; ayarlar.json'daki oyuncuyu geçersiz kılar "
+                    "(başka oyuncunun klip adına p-<ad> eklenir)")
     ap.add_argument("--min-skor", type=float, help="ayarlar.json'daki min_skor'u geçersiz kılar")
     ap.add_argument("--en-iyi", type=int, help="maç başına en iyi N an (0 = hepsi)")
     args = ap.parse_args()
@@ -92,27 +93,31 @@ def main() -> None:
     if not demos:
         raise SystemExit(f"Demo bulunamadı: {args.hedef}")
 
-    plan = []  # (demo, steamid, önek, klipler)
+    plan = []  # (demo, steamid, önek, klipler, oyuncu etiketi)
     for raw in demos:
         print(f"\n=== {raw.name} ===")
         demo = open_demo(raw)
-        map_name, steamid, highlights = analyze(demo, player, pre, post)
+        r = analyze_player(demo, player, pre, post, default=cfg["oyuncu"])
+        map_name, steamid, highlights = r["harita"], r["steamid"], r["highlights"]
+        tag = "" if r["varsayilan"] else player_tag(r["ad"], steamid)
+        if tag:
+            print(f"Oyuncu: {r['ad']} ({steamid}) — klip adlarına p-{tag} eklenir")
         print_report(map_name, highlights, min_score)
-        save_json(demo, highlights)
+        save_player(demo, r)
         clips = select_clips(highlights, min_score, limit)
         if clips:
-            plan.append((demo, steamid, clip_prefix(map_name, demo), clips))
+            plan.append((demo, steamid, clip_prefix(map_name, demo), clips, tag))
     if args.sadece_analiz or not plan:
         return
 
     out_dir = Path(cfg["cikti_klasoru"])
     if args.prova:
-        for demo, steamid, prefix, clips in plan:
+        for demo, steamid, prefix, clips, tag in plan:
             print(f"\n{demo.name}:")
             print("  " + " ".join(video_args(Path("csdm"), demo, steamid, [c["round"] for c in clips],
                                              pre, post, cfg["temiz_hud"])))
             for c in clips:
-                print(f"  -> {out_dir / clip_filename(prefix, c)}")
+                print(f"  -> {out_dir / clip_filename(prefix, c, tag)}")
         return
 
     tools, problems = preflight(cfg, csgo_dir)
@@ -122,7 +127,7 @@ def main() -> None:
 
     made: list[Path] = []
     failed: list[tuple[str, str]] = []
-    for n, (demo, steamid, prefix, clips) in enumerate(plan, 1):
+    for n, (demo, steamid, prefix, clips, tag) in enumerate(plan, 1):
         print(f"\n[{n}/{len(plan)}] {demo.name}: {len(clips)} klip")
         # İlk FullPacket'i bozuk demolar CS2'yi başa sararken çökertiyor; onarılmış kopyadan kaydet.
         rec, problems = ensure_repaired(demo)
@@ -136,7 +141,8 @@ def main() -> None:
             def record():
                 # Onarılmış demolarda her parça ayrı açılışta: CS2 ikinci atlamada çöküyor.
                 return record_demo(rec, clips, steamid, prefix, out_dir, tools["csdm"], tools["ffmpeg"],
-                                   pre, post, cfg["temiz_hud"], env=tools["env"], per_segment=bool(problems))
+                                   pre, post, cfg["temiz_hud"], env=tools["env"], per_segment=bool(problems),
+                                   player=tag)
 
             try:
                 made += record()
