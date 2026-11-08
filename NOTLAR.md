@@ -110,3 +110,31 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
   sayılıyor, demo yeniden analiz edilip kayıt bir kez daha deneniyor. Deneme betiği: `araclar\ancient_test.ps1`.
 - CSDM CLI `playback.launchParameters` ayarını kullanmıyor; `--cfg "con_logfile ..."` de dosya yazmadı.
   CS2 tarafını görmek için elle `steam.exe -applaunch 730 -condebug -novid -insecure +playdemo <demo>` kullan.
+
+### Takılan round'lar — a53a1e7b R10 (2026-11-08)
+- **R10 3K kaydedildi** (`ancient_a53a1e7b_R10_3K_3-HS_m4a1.mp4`, 16,7 sn, 2 parça). Tek açılış yine takıldı; parça
+  parça kayıtta 1. parça ilk denemede, 2. parça (tick 63995) ilk denemede takılıp **aynı başlangıçla düz tekrarda** çıktı.
+- Takılma demonun yapısından değil: FullPacket'ler 5 demoda da 3840 tick'te bir, R10'un yüklendiği 61441'deki paket
+  sağlam demolardakilerle aynı biçimde (tablosuz, Tick + PacketEntities + UserCommands). Her pakette 10 svc_UserCommands
+  var; sağlam Dust2/Anubis'te de aynı.
+- CSDM eklentisi (3.20.1) her satırda `csdm.log`'u açıp kapatıyor, yani günlük eksik kalmaz. Takılan açılışta günlük
+  `CreateInterface ... EntitySubclassUtilsV001`'de bitiyor: `ClientFullyConnect` ve "Demo playback started" hiç yok.
+  Yani CS2 **demoyu yüklerken/oynatmaya başlamadan** takılıyor; `demo_gototick`'e hiç gelmiyor. Başarılı açılışta sıra:
+  `ClientFullyConnect` → `[1] Demo playback started` → `[96] demo_gototick <başlangıç-65>` → `startmovie` → `quit`.
+  Takılma rastgele görünüyor (aynı parça bir açılışta takılıyor, sonrakinde çıkıyor).
+- CSDM tek aralık kaydında `demo_gototick <başlangıç - 65>` yapar (kurulum tick'i başlangıç - 64); action tick'i en az 96.
+- `render.py`: parça parça kayıtta CS2 takılır ya da çökerse ("Game error") parça yeniden denenir:
+  aynı başlangıç → önceki FullPacket'ten (atlama hedefi paketin 33 tick önüne çekilir) → 5 sn erken → (alternatif
+  yoksa) aynı başlangıçla bir kez daha → HLAE kuruluysa HLAE ile. Fazladan baş kısım ffmpeg ile kesilir (yeniden
+  kodlama, en fazla 12 sn). Her CS2 açılışından önce önceki CS2'nin kapanması beklenir (30 sn; **kapatmaz**).
+  Kalıcı hatalar (demo yok, veritabanında yok) tekrar denenmez. FullPacket tick'leri `onarim.fullpacket_ticks`.
+- **HLAE** (kurulmadı): `ayarlar.json → "kayit_sistemi": "HLAE"` ya da kuruluysa CS takılınca son çare. CSDM HLAE'yi
+  `%USERPROFILE%\.csdm\hlae\hlae.exe`'de arar (ya da CSDM ayarlarında özel konum). Kurulum: CS Demo Manager →
+  Settings → Video → HLAE → Install; ya da github.com/advancedfx/advancedfx/releases → `hlae_<sürüm>.zip`
+  (v2.193.0: 9,1 MB) bu klasöre açılır. `klip.bat --kontrol` HLAE seçiliyken kurulu değilse söyler.
+- **CSDM'siz kendi yol** (`playdemo` + `demo_gototick` + `startmovie`): CS2'de belirli tick'te komut çalıştırma yok
+  (CSDM eklentisi ya da HLAE `mirv_cmd` gerekir), netcon da çalışmıyor; otomatik yapılamıyor. `araclar\elle_kayit.ps1`
+  CS2'yi `-condebug +playdemo` ile açıp yazılacak komutları gösterir (elle kayıt ve takılmanın yerini
+  `game\csgo\console.log`'da görmek için).
+- Yan bulgu: `~/.csdm/settings.json` → `video.outputFolderPath` bozuk kodlanmış (`C:\yazÄ±lÄ±m\...`); CSDM'in klipleri
+  Downloads'a yazmasının sebebi büyük olasılıkla bu. Düzeltilmedi.

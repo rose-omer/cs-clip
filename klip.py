@@ -15,8 +15,8 @@ from pathlib import Path
 from analyze import analyze, print_report, save_json
 from config import load_config
 from demofile import demo_files, find_csgo_dir, open_demo, to_recycle_bin
-from kontrol import demo_in_db, preflight
-from onarim import ensure_repaired, is_repaired_copy, repaired_path
+from kontrol import demo_in_db, preflight, wait_cs2_closed
+from onarim import ensure_repaired, fullpacket_ticks, is_repaired_copy, repaired_path
 from render import (
     NOT_IN_DB,
     DemoFailed,
@@ -110,7 +110,7 @@ def main() -> None:
         for demo, steamid, prefix, clips in plan:
             print(f"\n{demo.name}:")
             print("  " + " ".join(video_args(Path("csdm"), demo, steamid, [c["round"] for c in clips],
-                                             pre, post, cfg["temiz_hud"])))
+                                             pre, post, cfg["temiz_hud"], cfg["kayit_sistemi"])))
             for c in clips:
                 print(f"  -> {out_dir / clip_filename(prefix, c)}")
         return
@@ -133,10 +133,14 @@ def main() -> None:
             failed.append((demo.name, err))
             continue
         try:
+            fullpackets = fullpacket_ticks(rec.read_bytes())  # takılan parçayı başka paketten başlatmak için
+
             def record():
                 # Onarılmış demolarda her parça ayrı açılışta: CS2 ikinci atlamada çöküyor.
                 return record_demo(rec, clips, steamid, prefix, out_dir, tools["csdm"], tools["ffmpeg"],
-                                   pre, post, cfg["temiz_hud"], env=tools["env"], per_segment=bool(problems))
+                                   pre, post, cfg["temiz_hud"], env=tools["env"], per_segment=bool(problems),
+                                   fullpackets=fullpackets, system=cfg["kayit_sistemi"],
+                                   hlae_fallback=tools["hlae"] is not None, wait_game=wait_cs2_closed)
 
             try:
                 made += record()

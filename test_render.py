@@ -158,14 +158,14 @@ def test_record_demo_falls_back_to_segments_and_keeps_good_clips(tmp_path):
             seq(tmp_path, 2, 100, 420)
             return 1, ["Recording in progress...", "Zaman aşımı: CS2 takıldı, kapatıldı"]
         a = int(cmd[3])
-        if a == 6000:  # R13'ün ikinci parçası takılır
+        if cmd[4] == "6320":  # R13'ün ikinci parçası her başlangıçla takılır
             return 1, ["Zaman aşımı: CS2 takıldı, kapatıldı"]
         seq(tmp_path, 1, a, int(cmd[4]))
         return 0, ["Video generated"]
 
     made = record_demo(demo, clips, "765", "x", out, Path("csdm"), None, 3, 2, True, runner=runner)
     assert [p.name for p in made] == ["x_R05_2K.mp4", "x_R20_3K.mp4"]
-    assert [c[3] for c in calls[1:]] == ["100", "5000", "6000", "9000"]
+    assert [c[3] for c in calls[1:]] == ["100", "5000", "6000", "5680", "9000"]  # 6000 bir de 5 sn erken
     assert not list(tmp_path.glob("sequence-*.mp4"))  # R13'ün yarım parçası ve tek açılış parçası silindi
 
 
@@ -190,3 +190,134 @@ def test_record_timeout_grows_with_footage():
     from render import START_ALLOWANCE, record_timeout
 
     assert record_timeout([{**H, "segments": [[0, 640]]}]) == START_ALLOWANCE + 6 * 10
+
+
+# --- takılan parçayı başka başlangıçla yeniden deneme ---------------------
+
+FPS = [1 + 3840 * k for k in range(33)]  # a53a1e7b: 3840 tick'te bir FullPacket
+
+
+def test_retry_starts_moves_r10_to_previous_fullpacket():
+    from render import GOTO_LEAD, fullpacket_before, retry_starts
+
+    # a53a1e7b R10: CSDM 61447'ye atlar -> CS2 61441'deki paketten başlar.
+    got = retry_starts(61512, FPS)
+    assert got[0] == ("aynı başlangıç", 61512)
+    assert got[1][0] == "önceki tam paketten"
+    assert fullpacket_before(got[1][1] - GOTO_LEAD, FPS) == 57601
+    assert 0 < 61512 - got[1][1] <= TICKRATE  # baştan bir saniyeden az fazlalık
+    assert len(got) == 2  # 5 sn erken de 57601'den başlardı: tekrar denenmez
+
+
+def test_retry_starts_skips_long_extra_lead_and_retries_plainly():
+    from render import retry_starts
+
+    # R13: 82443 paket başından 1802 tick sonra; önceki pakete inmek 28 sn fazlalık demek.
+    assert retry_starts(82508, FPS) == [("aynı başlangıç", 82508), ("aynı başlangıç, yeniden", 82508)]
+
+
+def test_retry_starts_without_fullpackets_tries_earlier():
+    from render import retry_starts
+
+    assert retry_starts(6000, []) == [("aynı başlangıç", 6000), ("5 sn erken", 6000 - 5 * TICKRATE)]
+
+
+def test_retry_starts_near_demo_start_has_no_earlier_start():
+    from render import retry_starts
+
+    assert [t for _, t in retry_starts(120, FPS)] == [120, 120]
+
+
+def test_attempts_adds_hlae_last():
+    from render import attempts
+
+    got = attempts(61512, FPS, "CS", hlae_fallback=True)
+    assert [s for *_, s in got] == ["CS", "CS", "HLAE"] and got[-1][1] == 61512
+    assert all(s == "HLAE" for *_, s in attempts(61512, FPS, "HLAE", hlae_fallback=True))
+
+
+def test_segment_args_recording_system():
+    from render import segment_args
+
+    args = segment_args(Path("csdm"), Path("d.dem"), "765", 1, 2, True, "HLAE")
+    assert args[args.index("--recording-system") + 1] == "HLAE"
+
+
+def test_record_demo_retries_hung_segment_from_earlier_start_and_trims(tmp_path, monkeypatch):
+    import render
+
+    demo = tmp_path / "m.dem"
+    demo.write_bytes(b"d")
+    out = tmp_path / "klipler"
+    clips = [{**H, "round": 10, "labels": ["3K"], "segments": [[61512, 61832]]}]
+    calls, waits, trims = [], [], []
+
+    def runner(cmd, env, timeout):
+        calls.append((cmd[3], cmd[cmd.index("--recording-system") + 1], timeout))
+        if cmd[3] == "61512":
+            seq(tmp_path, 1, 61512, 61832)  # yarım parça bırakıp takılır
+            return 1, ["Zaman aşımı: CS2 takıldı, kapatıldı"]
+        seq(tmp_path, 1, int(cmd[3]), int(cmd[4]))
+        return 0, ["Video generated"]
+
+    monkeypatch.setattr(render, "trim_lead", lambda p, sec, ff: trims.append((p.name, round(sec, 3))) or p)
+    made = record_demo(demo, clips, "765", "x", out, Path("csdm"), Path("ffmpeg"), 3, 2, True, runner=runner,
+                       per_segment=True, fullpackets=FPS, wait_game=lambda: waits.append(1) or True)
+    assert [c[0] for c in calls] == ["61512", "61474"]
+    assert calls[1][2] > calls[0][2]  # daha uzun görüntü, daha uzun süre sınırı
+    assert trims == [("sequence-1-tick-61474-to-61832.mp4", round(38 / TICKRATE, 3))]
+    assert len(waits) == 2  # her açılıştan önce CS2'nin kapanması beklenir
+    assert [p.name for p in made] == ["x_R10_3K.mp4"]
+    assert not list(tmp_path.glob("sequence-*.mp4"))
+
+
+def test_record_demo_does_not_retry_permanent_errors(tmp_path):
+    demo = tmp_path / "m.dem"
+    demo.write_bytes(b"d")
+    calls = []
+
+    def runner(cmd, env, timeout):
+        calls.append(cmd)
+        return 1, ["Missing demo file"]
+
+    with pytest.raises(DemoFailed, match="Missing demo"):
+        record_demo(demo, [{**H, "segments": [[61512, 61832]]}], "765", "x", tmp_path / "k", Path("csdm"), None,
+                    3, 2, True, runner=runner, per_segment=True, fullpackets=FPS, hlae_fallback=True)
+    assert len(calls) == 1
+
+
+def test_record_demo_falls_back_to_hlae_after_cs_attempts(tmp_path, monkeypatch):
+    import render
+
+    demo = tmp_path / "m.dem"
+    demo.write_bytes(b"d")
+    systems = []
+
+    def runner(cmd, env, timeout):
+        system = cmd[cmd.index("--recording-system") + 1]
+        systems.append(system)
+        if system == "CS":
+            return 1, ["Game error"]
+        seq(tmp_path, 1, int(cmd[3]), int(cmd[4]))
+        return 0, ["Video generated"]
+
+    made = record_demo(demo, [{**H, "round": 10, "labels": ["3K"], "segments": [[61512, 61832]]}], "765", "x",
+                       tmp_path / "k", Path("csdm"), None, 3, 2, True, runner=runner, per_segment=True,
+                       fullpackets=FPS, hlae_fallback=True)
+    assert systems == ["CS", "CS", "HLAE"]
+    assert [p.name for p in made] == ["x_R10_3K.mp4"]
+
+
+def test_record_demo_does_not_launch_while_cs2_still_open(tmp_path):
+    demo = tmp_path / "m.dem"
+    demo.write_bytes(b"d")
+    calls = []
+    with pytest.raises(DemoFailed, match="CS2 kapanmadı"):
+        record_demo(demo, [H], "765", "x", tmp_path / "k", Path("csdm"), None, 3, 2, True,
+                    runner=lambda cmd, env, timeout: calls.append(cmd) or (0, []), wait_game=lambda: False)
+    assert calls == []
+
+
+def test_record_demo_rejects_unknown_recording_system(tmp_path):
+    with pytest.raises(ValueError, match="kayıt sistemi"):
+        record_demo(tmp_path / "m.dem", [H], "765", "x", tmp_path, Path("csdm"), None, 3, 2, True, system="OBS")
