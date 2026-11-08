@@ -95,7 +95,7 @@ def test_record_demo_moves_single_parts_and_skips_existing(tmp_path):
     (out / "x_R05_2K.mp4").write_bytes(b"old")
     calls = []
 
-    def runner(cmd, env):
+    def runner(cmd, env, timeout):
         calls.append(cmd)
         seq(tmp_path, 1, 9000, 9400)
         return 0, ["Video generated"]
@@ -112,4 +112,19 @@ def test_record_demo_raises_when_game_fails(tmp_path):
     demo.write_bytes(b"d")
     with pytest.raises(DemoFailed, match="Game error"):
         record_demo(demo, [H], "765", "x", tmp_path / "k", Path("csdm"), None, 3, 2, True,
-                    runner=lambda cmd, env: (0, ["Starting Counter-Strike...", "Game error"]))
+                    runner=lambda cmd, env, timeout: (0, ["Starting Counter-Strike...", "Game error"]))
+
+
+def test_run_streaming_kills_hung_process():
+    import sys
+    from render import TIMEOUT_LINE, run_streaming
+
+    code, lines = run_streaming([sys.executable, "-c", "print('basladi', flush=True); import time; time.sleep(30)"],
+                                timeout=2)
+    assert lines[0] == "basladi" and lines[-1] == TIMEOUT_LINE and failure(lines) == TIMEOUT_LINE
+
+
+def test_record_timeout_grows_with_footage():
+    from render import START_ALLOWANCE, record_timeout
+
+    assert record_timeout([{**H, "segments": [[0, 640]]}]) == START_ALLOWANCE + 6 * 10

@@ -58,3 +58,10 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
 2. `olcum.ps1`'i düzelt, aşamaları ölç; CSDM `--recording-system HLAE` dene (TGA'sız kayıt).
 3. Downloads izleme modu (yeni demo gelince otomatik kayıt).
 4. Steam'deki `-netconport 2121 -windowed -noborder` başlatma seçeneği artık gereksiz; istenirse kaldırılır.
+
+## 2026-11-08 — arayüz ve 4 yeni demo
+- Arayüz (`arayuz.bat`) gerçek demolarla denendi: istatistik, klip oynatma, arayüzden kayıt çalışıyor.
+- Yeni demolar: Dust2 `a95f6ac2` ve Anubis `797f8ecc` 3'er klip. Ancient `3dd3d912` "Game error" ile çöktü;
+  Ancient `a53a1e7b`'de CS2 10 dk hiç kare yazmadan takıldı, elle kapatıldı.
+  Ancient'ta 4 demonun 3'ü kaydedilemedi (yalnız `2dd01012` çalıştı): CS2/CSDM tarafında Ancient'a özgü bir sorun olabilir.
+- Kayda süre sınırı eklendi: 180 sn + görüntü süresinin 6 katı; dolarsa csdm ve CS2 kapatılıp sıradaki demoya geçilir.
