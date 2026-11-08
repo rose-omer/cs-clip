@@ -52,6 +52,11 @@ def test_concat_list_escapes_quotes():
     assert text.splitlines() == ["file 'C:/k/a.mp4'", "file 'C:/k/it'\\''s.mp4'"]
 
 
+def test_concat_list_makes_relative_paths_absolute(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert concat_list([Path("klipler/a.mp4")]) == f"file '{(tmp_path / 'klipler' / 'a.mp4').as_posix()}'"
+
+
 def test_video_args_records_all_rounds_in_one_launch():
     args = video_args(Path("csdm.cmd"), Path("d.dem"), "765", [20, 5, 20], 3, 2, clean_hud=True)
     assert args[:3] == ["csdm.cmd", "video", "d.dem"]
