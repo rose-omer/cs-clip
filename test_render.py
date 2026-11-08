@@ -63,6 +63,7 @@ def test_video_args_records_all_rounds_in_one_launch():
     assert args[args.index("--rounds") + 1] == "5,20"
     assert args[args.index("--start-seconds-before") + 1] == "3"
     assert "--no-concatenate-sequences" in args and "--show-only-death-notices" in args
+    assert "--no-player-voices" in args
 
 
 def test_failure_finds_error_line():
@@ -138,6 +139,7 @@ def test_record_demo_per_segment_launches_once_per_tick_range(tmp_path):
         render.join_parts = orig
     assert [c[3:5] for c in calls] == [["100", "420"], ["1700", "2020"], ["5000", "5528"]]
     assert all(c[c.index("--focus-player") + 1] == "765" and "--mode" not in c for c in calls)
+    assert all("--no-player-voices" in c for c in calls)
     assert [p.name for p in made] == ["x_R08_3K.mp4", "x_R12_2K.mp4"]
 
 
