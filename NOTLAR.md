@@ -90,8 +90,12 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
   - İlk FullPacket'i tamamen silmek: çökmedi ama başa sarma 3841'deki pakete gidip takıldı.
   - İlk FullPacket'i sağlam biçime getirmek (yalnız `userinfo`, UserCommands yok): "Demo Skipping finished at tick 0",
     demo sorunsuz oynuyor. **Çözüm bu.**
-- `a53a1e7b` (diğer "bozuk" Ancient) elle `playdemo` ile sorunsuz oynuyor; ilk FullPacket'i de sağlam. CSDM'deki
-  10 dk takılmanın sebebi başka; tekrar denenmeli.
+- `a53a1e7b` (diğer "bozuk" Ancient) elle `playdemo` ile sorunsuz oynuyor; ilk FullPacket'i de sağlam. CSDM ile
+  tek açılışta yine takıldı (eklenti yüklendi, oynatma hiç başlamadı; süre sınırı kapattı). Parça parça: 6 parçanın
+  4'ü kaydedildi → R05 2K ve R10 3K klipleri çıktı. R13'ün ilk parçasında (tick 82508) CS2 ayrı açılışta da takıldı;
+  R13 (skor 3, glock 2K) kaydedilemedi.
+- Bu yüzden `record_demo` artık: tek açılış çöker/takılırsa yarım parçaları silip her parçayı ayrı açılışta dener;
+  parça parça kayıtta bir klibin parçası başarısız olursa yalnız o klip atlanır (parçaları silinir), diğerleri kalır.
 - CSDM ile kayıt: başa sarma artık geçiyor, CSDM 46081'e atlayıp ilk klibi kaydediyor, ama bir sonraki klibe
   (47690) atlarken yine `engine2.dll+0x10c5b0`'da çöküyor (CSDM eklenti günlüğü: `game\bin\win64\csdm.log`).
   Sonraki FullPacket'lerden UserCommands'ı silmek de işe yaramadı. Aynı parça (47755–48075) ayrı bir CS2

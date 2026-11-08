@@ -183,11 +183,14 @@ def record_demo(
     runner=run_streaming,
     env: dict | None = None,
     per_segment: bool = False,
+    fallback: bool = True,
 ) -> list[Path]:
     """Demonun kliplerini tek CS2 açılışında kaydeder; hazır klipleri atlar.
 
-    per_segment: her tick aralığı ayrı CS2 açılışında kaydedilir. Onarılmış demolarda CS2 ikinci
-    atlamada (bir klipten sonrakine geçerken) çöküyor; tek atlamada sorunsuz.
+    per_segment: her tick aralığı ayrı CS2 açılışında kaydedilir. Bazı demolarda CS2 ikinci
+    atlamada (bir klipten sonrakine geçerken) çöküyor ya da takılıyor; tek atlamada sorunsuz.
+    Parçası kaydedilemeyen klip atlanır, diğerleri korunur.
+    fallback: tek açılış çöker/takılırsa parça parça yeniden dener.
     """
     out_dir = Path(out_dir)
     targets = {i: out_dir / clip_filename(prefix, h) for i, h in enumerate(clips)}
@@ -197,24 +200,52 @@ def record_demo(
     if not todo:
         return []
 
-    started = time.time() - 1
-    if per_segment:
-        runs = [(segment_args(csdm, demo, steamid, a, b, clean_hud), START_ALLOWANCE + SECONDS_PER_CLIP_SECOND
-                 * (b - a) / TICKRATE) for i in todo for a, b in segments(clips[i])]
-    else:
-        runs = [(video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud),
-                 record_timeout([clips[i] for i in todo]))]
-    for k, (cmd, timeout) in enumerate(runs, 1):
-        if per_segment:
-            print(f"  parça {k}/{len(runs)} (tick {cmd[3]}-{cmd[4]})")
+    folders = {Path(demo).parent, out_dir}  # CSDM çıktı klasörü ayarını her zaman uygulamıyor
+
+    def new_parts(since: float) -> list[Path]:
+        return [p for d in folders if d.is_dir() for p in d.glob("sequence-*.mp4") if p.stat().st_mtime >= since]
+
+    def run(cmd, timeout) -> str | None:
         code, lines = runner(cmd, env, timeout)
         err = failure(lines)
-        if err or code:
-            raise DemoFailed(err or f"csdm çıkış kodu {code}")
+        return err or (f"csdm çıkış kodu {code}" if code else None)
 
-    # CSDM çıktı klasörü ayarını her zaman uygulamıyor; demonun klasörüne de bak.
-    folders = {Path(demo).parent, out_dir}
-    parts = [p for d in folders if d.is_dir() for p in d.glob("sequence-*.mp4") if p.stat().st_mtime >= started]
+    started = time.time() - 1
+    if not per_segment:
+        err = run(video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud),
+                  record_timeout([clips[i] for i in todo]))
+        if err:
+            if not fallback or NOT_IN_DB in err:
+                raise DemoFailed(err)
+            print(f"  ! Tek açılışta olmadı ({err}); her parça ayrı açılışta deneniyor.")
+            for p in new_parts(started):
+                p.unlink(missing_ok=True)  # yarım kalan denemenin parçaları karışmasın
+            per_segment = True
+    if per_segment:
+        total = sum(len(segments(clips[i])) for i in todo)
+        k, failed, last_err = 0, set(), None
+        for i in todo:
+            before = set(new_parts(started))
+            for a, b in segments(clips[i]):
+                k += 1
+                if i in failed:
+                    continue
+                print(f"  parça {k}/{total} (tick {a}-{b})")
+                err = run(segment_args(csdm, demo, steamid, a, b, clean_hud),
+                          START_ALLOWANCE + SECONDS_PER_CLIP_SECOND * (b - a) / TICKRATE)
+                if err:
+                    if NOT_IN_DB in err:
+                        raise DemoFailed(err)
+                    print(f"  ! R{clips[i]['round']} atlandı: {err}")
+                    failed.add(i)
+                    last_err = err
+                    for p in set(new_parts(started)) - before:  # bu klibin parçaları başka klibe karışmasın
+                        p.unlink(missing_ok=True)
+        if len(failed) == len(todo):
+            raise DemoFailed(last_err)
+        todo = [i for i in todo if i not in failed]
+
+    parts = new_parts(started)
     wanted = [clips[i] for i in todo]
     done = []
     for k, group in assign_parts(parts, wanted).items():
@@ -225,6 +256,8 @@ def record_demo(
     for k, h in enumerate(wanted):
         if targets[todo[k]] not in done:
             print(f"  ! R{h['round']} için video çıkmadı")
+    for p in new_parts(started):  # atlanan kliplerin yarım parçaları
+        p.unlink(missing_ok=True)
     return done
 
 
