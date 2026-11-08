@@ -582,6 +582,17 @@ def make_handler(app: App):
     return Handler
 
 
+def already_running(url: str) -> bool:
+    """Bu portta bir cs-klip arayüzü yanıt veriyor mu."""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url + "api/kontrol", timeout=2) as r:
+            return "hazir" in json.loads(r.read())
+    except (OSError, ValueError):
+        return False
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="cs-klip arayüzü")
@@ -594,9 +605,14 @@ def main() -> None:
 
     mimetypes.add_type("video/mp4", ".mp4")
     mimetypes.add_type("text/javascript", ".js")
+    url = f"http://127.0.0.1:{args.port}/"
+    if already_running(url):  # kısayola ikinci kez tıklanınca: açık arayüzü göster, yenisini başlatma
+        print(f"Arayüz zaten açık: {url}")
+        if not args.tarayici_acma:
+            webbrowser.open(url)
+        return
     app = App(load_config(args.ayarlar), args.ayarlar)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(app))
-    url = f"http://127.0.0.1:{args.port}/"
     print(f"Arayüz: {url}  (kapatmak için Ctrl+C)")
     if args.otomatik:
         threading.Thread(target=otomatik.calistir, args=(app.cfg, args.ayarlar), daemon=True).start()
