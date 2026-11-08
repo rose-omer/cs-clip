@@ -23,6 +23,9 @@ from urllib.parse import unquote, urlparse
 import eniyi
 import otomatik
 import paylas
+
+
+import kariyer
 import render
 from analyze import analyze, save_json
 from config import DEFAULTS, load_config, save_config, validate
@@ -261,6 +264,12 @@ class App:
         return {"klip": info["klip"], "adet": len(clips), "boyut_mb": info["boyut_mb"], "tarih": info["tarih"],
                 "dikey": opts.dikey, "secenekler": info["secenekler"]}
 
+
+    # --- kariyer ---
+    def career(self) -> dict:
+        """Analiz edilmiş tüm maçlar (yalnız var olan stats.json'lar okunur; analiz başlatılmaz)."""
+        return kariyer.career(self.folders, self.demos())
+
     # --- kayıt ---
     def start_recording(self, did: str, best: int) -> dict:
         with self.lock:
@@ -370,6 +379,10 @@ def make_handler(app: App):
                 return self.handle_api(app.best)
             if path == "/api/otomatik":
                 return self.handle_api(lambda: otomatik.ozet(app.oto_dosya, app.kilit))
+
+
+            if path == "/api/kariyer":
+                return self.handle_api(app.career)
             if m := re.fullmatch(r"/api/demo/([^/]+)/klipler", path):
                 return self.handle_api(lambda: app.clips(m.group(1)))
             if m := re.fullmatch(r"/api/demo/([^/]+)", path):
