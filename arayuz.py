@@ -18,11 +18,12 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import eniyi
 import render
-from analyze import analyze, save_json
+from analyze import (TAG_PREFIX, analyze, analyze_all, analyze_player, highlights_path, player_tag, read_player,
+                     save_json, save_player)
 from config import load_config
 from demofile import find_csgo_dir, open_demo
 from klip import DEMO_SUFFIXES, clip_prefix
@@ -43,6 +44,11 @@ def demo_id(path: Path) -> str:
         if name.lower().endswith(s):
             return name[: -len(s)]
     return path.stem
+
+
+def fresh(f: Path, demo: Path) -> bool:
+    """Önbellek dosyası demodan yeni mi."""
+    return f.exists() and f.stat().st_mtime >= demo.stat().st_mtime
 
 
 def match_code(did: str) -> str:
@@ -126,25 +132,103 @@ class App:
     def highlights(self, did: str) -> tuple[Path, list[dict]]:
         with self.demo_lock(did):
             demo = open_demo(self.demo_path(did))
-            f = demo.with_suffix(".highlights.json")
-            if f.exists() and f.stat().st_mtime >= demo.stat().st_mtime:
+            f = highlights_path(demo)
+            if fresh(f, demo):
                 return demo, json.loads(f.read_text(encoding="utf-8"))
             _, _, hl = analyze(demo, self.cfg["oyuncu"], self.cfg["once_sn"], self.cfg["sonra_sn"])
             save_json(demo, hl)
             return demo, hl
 
-    def clips(self, did: str) -> dict:
-        _, hl = self.highlights(did)
-        files = {re.search(r"_R(\d+)_", p.name).group(1): p for p in self.clip_files(did) if re.search(r"_R(\d+)_", p.name)}
-        shown = select_clips(hl, self.cfg["min_skor"])
+    # --- oyuncular ---
+    def default_player(self, did: str) -> dict:
+        """Varsayılan oyuncunun {steamid, ad, varsayilan}; istatistik önbelleği yoksa steamid None."""
+        stats = self.cached_stats(self.demo_path(did)) or {}
+        sid = stats.get("oyuncu_steamid")
+        name = next((p.get("ad") for p in stats.get("oyuncular", []) if str(p.get("steamid")) == str(sid)), None)
+        return {"steamid": str(sid) if sid else None, "ad": name or self.cfg["oyuncu"], "varsayilan": True}
+
+    def is_default(self, did: str, who: str | None) -> bool:
+        if not who:
+            return True
+        return who.casefold() == str(self.cfg["oyuncu"]).casefold() or who == self.default_player(did)["steamid"]
+
+    def player_highlights(self, did: str, who: str | None) -> dict:
+        """{steamid, ad, varsayilan, highlights}. who: ad ya da SteamID64; boşsa varsayılan oyuncu.
+
+        Diğer oyuncular <demo>.highlights.<steamid>.json'da önbelleklenir; varsayılan oyuncunun dosyası değişmez.
+        """
+        if self.is_default(did, who):
+            return {**self.default_player(did), "highlights": self.highlights(did)[1]}
+        with self.demo_lock(did):
+            demo = open_demo(self.demo_path(did))
+            if re.fullmatch(r"\d+", who) and fresh(f := highlights_path(demo, who), demo):
+                data = read_player(f)
+                if data and "steamid" in data:
+                    return {"steamid": str(data["steamid"]), "ad": data.get("oyuncu") or who, "varsayilan": False,
+                            "highlights": data["highlights"]}
+            r = analyze_player(demo, who, self.cfg["once_sn"], self.cfg["sonra_sn"], default=self.cfg["oyuncu"])
+            if not (r["varsayilan"] and fresh(highlights_path(demo), demo)):
+                save_player(demo, r)
+            return {k: r[k] for k in ("steamid", "ad", "varsayilan", "highlights")}
+
+    def player_clip_files(self, did: str, tag: str | None) -> dict[int, Path]:
+        """round -> klip dosyası; tag None ise varsayılan oyuncunun (etiketsiz) klipleri."""
+        out = {}
+        for p in self.clip_files(did):
+            info = eniyi.parse_name(p.name)
+            if info and (info["oyuncu"] or "").casefold() == (tag or "").casefold():
+                out.setdefault(info["round"], p)
+        return out
+
+    def clip_rows(self, did: str, player: dict) -> list[dict]:
+        tag = None if player["varsayilan"] else player_tag(player["ad"], player["steamid"])
+        files = self.player_clip_files(did, tag)
         rows = []
-        for h in sorted(shown, key=lambda h: h["score"], reverse=True):
-            clip = files.get(f"{h['round']:02d}")
+        for h in sorted(select_clips(player["highlights"], self.cfg["min_skor"]), key=lambda h: h["score"], reverse=True):
+            clip = files.get(int(h["round"]))
             rows.append({"round": h["round"], "score": h["score"], "labels": h["labels"], "weapons": h["weapons"],
                          "saniye": round(clip_seconds(h)), "klip": f"/klip/{clip.name}" if clip else None})
+        return rows
+
+    def clips(self, did: str, who: str | None = None) -> dict:
+        player = self.player_highlights(did, who)
+        rows = self.clip_rows(did, player)
         job = dict(self.job) if self.job["demo"] == did else {"durum": "bos", "mesaj": "", "satirlar": []}
         job.pop("demo", None)
-        return {"highlightlar": rows, "kayit": job}
+        info = {k: player[k] for k in ("steamid", "ad", "varsayilan")}
+        if not player["varsayilan"]:
+            info["etiket"] = TAG_PREFIX + player_tag(player["ad"], player["steamid"])
+        return {"highlightlar": rows, "kayit": job, "oyuncu": info}
+
+    def everyone(self, did: str) -> dict:
+        """Maçtaki her oyuncunun en iyi anı (skor eşiğini geçenlerden), en yüksek puan önce."""
+        default = self.default_player(did)
+        stats = self.cached_stats(self.demo_path(did)) or {}
+        known = [str(p["steamid"]) for p in stats.get("oyuncular", []) if p.get("steamid")]
+        with self.demo_lock(did):
+            demo = open_demo(self.demo_path(did))
+            others = [s for s in known if s != default["steamid"]]
+            players = None
+            if known and default["steamid"] and fresh(highlights_path(demo), demo) \
+                    and all(fresh(highlights_path(demo, s), demo) for s in others):
+                players = [{**default, "highlights": json.loads(highlights_path(demo).read_text(encoding="utf-8"))}]
+                for s in others:
+                    data = read_player(highlights_path(demo, s)) or {}
+                    players.append({"steamid": s, "ad": data.get("oyuncu") or s, "varsayilan": False,
+                                    "highlights": data.get("highlights", [])})
+            if players is None:
+                res = analyze_all(demo, self.cfg["once_sn"], self.cfg["sonra_sn"], default=self.cfg["oyuncu"])
+                players = res["oyuncular"]
+                for r in players:
+                    if not (r["varsayilan"] and fresh(highlights_path(demo), demo)):
+                        save_player(demo, r)
+        rows = []
+        for p in players:
+            shown = self.clip_rows(did, p)
+            rows.append({"steamid": p["steamid"], "ad": p["ad"], "varsayilan": p["varsayilan"],
+                         "highlight_sayisi": len(shown), "en_iyi": shown[0] if shown else None})
+        rows.sort(key=lambda r: (-(r["en_iyi"]["score"] if r["en_iyi"] else -1), str(r["ad"]).casefold()))
+        return {"oyuncular": rows}
 
     # --- en iyi klipler ---
     def best_clips(self) -> list[dict]:
@@ -157,11 +241,12 @@ class App:
     def best(self) -> dict:
         return {"klipler": self.best_clips(), "montaj": eniyi.montage_info(self.out_dir)}
 
-    def best_montage(self, count: int) -> dict:
+    def best_montage(self, count: int, player: str | None = None) -> dict:
+        """player: None = varsayılan oyuncunun klipleri, eniyi.ALL_PLAYERS = herkes, yoksa oyuncu etiketi."""
         if not self.montage_lock.acquire(blocking=False):
             raise ApiError(HTTPStatus.CONFLICT, "Montaj sürüyor.")
         try:
-            clips = self.best_clips()[:count]
+            clips = eniyi.by_player(self.best_clips(), player)[:count]
             if not clips:
                 raise ApiError(HTTPStatus.CONFLICT, "Montaj için klip yok; önce klip kaydedin.")
             ffmpeg = find_ffmpeg(self.cfg["ffmpeg_yolu"])
@@ -188,15 +273,18 @@ class App:
             finally:
                 part.unlink(missing_ok=True)
             (self.out_dir / eniyi.MONTAGE_META).write_text(
-                json.dumps({"adet": len(clips), "klipler": [c["ad"] for c in clips]}, ensure_ascii=False, indent=2),
+                json.dumps({"adet": len(clips), "oyuncu": player, "klipler": [c["ad"] for c in clips]},
+                           ensure_ascii=False, indent=2),
                 encoding="utf-8")
             info = eniyi.montage_info(self.out_dir)
-            return {"klip": info["klip"], "adet": len(clips), "boyut_mb": info["boyut_mb"], "tarih": info["tarih"]}
+            return {"klip": info["klip"], "adet": len(clips), "oyuncu": player, "boyut_mb": info["boyut_mb"],
+                    "tarih": info["tarih"]}
         finally:
             self.montage_lock.release()
 
     # --- kayıt ---
-    def start_recording(self, did: str, best: int) -> dict:
+    def start_recording(self, did: str, best: int, player: str | None = None) -> dict:
+        """player: ad ya da SteamID64 (klip.py --oyuncu); boşsa ayarlar.json'daki oyuncu."""
         with self.lock:
             if self.job["durum"] == "calisiyor":
                 raise ApiError(HTTPStatus.CONFLICT, "Başka bir kayıt sürüyor.")
@@ -205,13 +293,17 @@ class App:
             _, problems = preflight(self.cfg, csgo)
             if problems:
                 raise ApiError(HTTPStatus.CONFLICT, "Kayıt başlayamaz: " + " ".join(problems))
-            self.job = {"durum": "calisiyor", "mesaj": "Kayıt başladı", "satirlar": [], "demo": did}
-        threading.Thread(target=self._record, args=(path, best), daemon=True).start()
-        return {"durum": "calisiyor"}
+            self.job = {"durum": "calisiyor", "mesaj": "Kayıt başladı", "satirlar": [], "demo": did, "oyuncu": player}
+        threading.Thread(target=self._record, args=(path, best, player), daemon=True).start()
+        return {"durum": "calisiyor", "oyuncu": player}
 
-    def _record(self, path: Path, best: int) -> None:
-        env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+    def record_command(self, path: Path, best: int, player: str | None = None) -> list[str]:
         cmd = [sys.executable, str(ROOT / "klip.py"), str(path), "--en-iyi", str(best)]
+        return cmd + [f"--oyuncu={player}"] if player else cmd  # '=' ile: '-' ile başlayan ad bayrak sanılmasın
+
+    def _record(self, path: Path, best: int, player: str | None = None) -> None:
+        env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+        cmd = self.record_command(path, best, player)
         try:
             with subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
                                   text=True, encoding="utf-8", errors="replace",
@@ -282,7 +374,9 @@ def make_handler(app: App):
                 self.send_json({"hata": f"Beklenmeyen hata: {e}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
         def do_GET(self):
-            path = unquote(urlparse(self.path).path)
+            url = urlparse(self.path)
+            path = unquote(url.path)
+            who = (parse_qs(url.query).get("oyuncu") or [""])[0].strip() or None
             if path == "/api/kontrol":
                 def check():
                     csgo = Path(app.cfg["csgo_klasoru"]) if app.cfg["csgo_klasoru"] else find_csgo_dir()
@@ -294,7 +388,9 @@ def make_handler(app: App):
             if path == "/api/en-iyi":
                 return self.handle_api(app.best)
             if m := re.fullmatch(r"/api/demo/([^/]+)/klipler", path):
-                return self.handle_api(lambda: app.clips(m.group(1)))
+                return self.handle_api(lambda: app.clips(m.group(1), who))
+            if m := re.fullmatch(r"/api/demo/([^/]+)/herkes", path):
+                return self.handle_api(lambda: app.everyone(m.group(1)))
             if m := re.fullmatch(r"/api/demo/([^/]+)", path):
                 return self.handle_api(lambda: app.stats(m.group(1)))
             if path.startswith("/klip/"):
@@ -311,10 +407,14 @@ def make_handler(app: App):
             if m := re.fullmatch(r"/api/demo/([^/]+)/kaydet", path):
                 def start():
                     try:
-                        best = int(json.loads(body or b"{}").get("en_iyi", 3))
+                        data = json.loads(body or b"{}")
+                        best = int(data.get("en_iyi", 3))
                     except (ValueError, TypeError, AttributeError):
                         raise ApiError(HTTPStatus.BAD_REQUEST, "en_iyi sayı olmalı.")
-                    return app.start_recording(m.group(1), best)
+                    player = data.get("oyuncu") or None
+                    if player is not None and (not isinstance(player, str) or not player.strip() or len(player) > 64):
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "oyuncu bir ad ya da SteamID olmalı.")
+                    return app.start_recording(m.group(1), best, player.strip() if player else None)
                 return self.handle_api(start)
             if path == "/api/en-iyi/montaj":
                 def montage():
@@ -325,7 +425,10 @@ def make_handler(app: App):
                     count = eniyi.parse_count(data)
                     if count is None:
                         raise ApiError(HTTPStatus.BAD_REQUEST, f"adet 1 ile {eniyi.MAX_COUNT} arasında bir sayı olmalı.")
-                    return app.best_montage(count)
+                    ok, player = eniyi.parse_player(data)
+                    if not ok:
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "oyuncu geçersiz.")
+                    return app.best_montage(count, player)
                 return self.handle_api(montage)
             self.send_json({"hata": "Bulunamadı."}, HTTPStatus.NOT_FOUND)
 

@@ -1,6 +1,7 @@
 """Demo dosyasını açma ve CS2 kurulumunu bulma."""
 
 import bz2
+import glob
 import gzip
 import re
 import shutil
@@ -71,12 +72,13 @@ def find_csgo_dir(root: Path | None = None) -> Path | None:
 
 
 def demo_files(demo: Path) -> list[Path]:
-    """Bir demoya ait dosyalar: açılmış .dem, sıkıştırılmış hâli, highlight ve istatistik JSON'u."""
+    """Bir demoya ait dosyalar: açılmış .dem, sıkıştırılmış hâli, highlight (oyuncu başına) ve istatistik JSON'u."""
     demo = Path(demo)
     base = demo.with_suffix("")  # mac.dem -> mac
     names = [demo.name, *(base.name + ".dem" + s for s in _OPENERS), base.name + ".highlights.json",
              base.name + ".stats.json"]
-    return [p for n in dict.fromkeys(names) if (p := demo.parent / n).exists()]
+    players = sorted(demo.parent.glob(glob.escape(base.name) + ".highlights.*.json"))  # diğer oyuncular
+    return [p for n in dict.fromkeys(names) if (p := demo.parent / n).exists()] + players
 
 
 def to_recycle_bin(paths: list[Path]) -> bool:
