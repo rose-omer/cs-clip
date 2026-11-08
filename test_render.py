@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -48,8 +49,10 @@ def test_clip_filename_is_safe_for_windows_and_adds_weapon():
 
 
 def test_concat_list_escapes_quotes():
-    text = concat_list([Path("C:/k/a.mp4"), Path("C:/k/it's.mp4")])
-    assert text.splitlines() == ["file 'C:/k/a.mp4'", "file 'C:/k/it'\\''s.mp4'"]
+    # "C:/k" yalnız Windows'ta mutlak yol; Linux'ta aynı kontrol "/k" ile yapılır.
+    root = "C:/k" if sys.platform == "win32" else "/k"
+    text = concat_list([Path(f"{root}/a.mp4"), Path(f"{root}/it's.mp4")])
+    assert text.splitlines() == [f"file '{root}/a.mp4'", f"file '{root}/it'\\''s.mp4'"]
 
 
 def test_concat_list_makes_relative_paths_absolute(tmp_path, monkeypatch):
@@ -177,8 +180,8 @@ def test_record_demo_raises_when_game_fails(tmp_path):
                     runner=lambda cmd, env, timeout: (0, ["Starting Counter-Strike...", "Game error"]))
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="kill_tree süreç ağacını taskkill ile kapatır (yalnız Windows)")
 def test_run_streaming_kills_hung_process():
-    import sys
     from render import TIMEOUT_LINE, run_streaming
 
     code, lines = run_streaming([sys.executable, "-c", "print('basladi', flush=True); import time; time.sleep(30)"],
