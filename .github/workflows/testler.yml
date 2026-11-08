@@ -1,0 +1,56 @@
+name: testler
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: testler-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Araç Windows için yazıldı; Linux'ta da çalıştırmak platforma bağlı hataları erkenden yakalar.
+        # Windows'a özgü testler kendi içinde skipif ile işaretli.
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Bağımlılıklar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # test_montage.py gerçek ffmpeg ister; Linux'ta kurmak ucuz. Windows'ta yoksa test atlanır.
+      - name: ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
+
+      - name: pytest
+        run: pytest -q -rs
+
+  ruff:
+    name: ruff (yalnız hatalar)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff==0.17.4
+      # E9: sözdizimi hataları, F: pyflakes (tanımsız ad, kullanılmayan içe aktarma vb.). Biçim denetimi yok.
+      - run: ruff check --select E9,F --output-format github .
