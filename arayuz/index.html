@@ -3,43 +3,78 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cs-klip</title>
+<title>cs-klip — Maç analizi</title>
+<meta name="description" content="cs-klip: CS2 demo istatistikleri ve highlight klipleri.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="uygulama">
-  <aside class="kenar">
-    <div class="logo">cs<span>-klip</span></div>
 
-    <div id="kontrol" class="kontrol">Kontrol ediliyor…</div>
+<!-- ikon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-elim" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1.2a5.8 5.8 0 0 0-5.8 5.8c0 2 1 3.5 2.2 4.3V14h2v-1.4h1.2V14h.8v-1.4h1.2V14h2v-2.7c1.2-.8 2.2-2.3 2.2-4.3A5.8 5.8 0 0 0 8 1.2ZM5.6 9.3a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8Zm4.8 0a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8Z"/></symbol>
+  <symbol id="i-bomb" viewBox="0 0 16 16"><path d="M8 .5l1.5 3.9 3.9-1.6-1.6 3.9L15.5 8l-3.7 1.3 1.6 3.9-3.9-1.6L8 15.5l-1.5-3.9-3.9 1.6 1.6-3.9L.5 8l3.7-1.3-1.6-3.9 3.9 1.6Z"/></symbol>
+  <symbol id="i-defuse" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 .8 2 3.2v4.6c0 3.5 2.6 6.3 6 7.4 3.4-1.1 6-3.9 6-7.4V3.2Zm2.9 4.4L7.2 9.6 5 7.6 3.9 8.8l3.4 3 4.8-5.6Z"/></symbol>
+  <symbol id="i-time" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 2a5 5 0 1 1 0 10A5 5 0 0 1 8 3Zm-.9 1.6v4l3.2 1.9.9-1.5-2.3-1.4V4.6Z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M3.5 1.8v12.4L14 8Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 16 16"><path d="M3 2h3.6v12H3zM9.4 2H13v12H9.4z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 1 3.5 5.6l1.4 1.4L7 4.9V11h2V4.9L11.1 7l1.4-1.4ZM2 12v3h12v-3h-2v1H4v-1Z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13.6 2.4v4h-4l1.6-1.6A4.6 4.6 0 0 0 3.4 7H1.4A6.6 6.6 0 0 1 12.6 3.4ZM2.4 13.6v-4h4L4.8 11.2A4.6 4.6 0 0 0 12.6 9h2a6.6 6.6 0 0 1-11.2 3.6Z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1 .5 14.5h15Zm-1 5h2v4.4H7Zm0 5.6h2v1.8H7Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.4 4.2-4.2 5.1-2.7-2.4 1-1.2 1.5 1.3 3.2-3.8Z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M3.1 1.7 8 6.6l4.9-4.9 1.4 1.4L9.4 8l4.9 4.9-1.4 1.4L8 9.4l-4.9 4.9-1.4-1.4L6.6 8 1.7 3.1Z"/></symbol>
+  <symbol id="i-film" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 2h14v12H1Zm2 2v2h2V4Zm0 3.5v1h2v-1Zm0 2.5v2h2v-2Zm8-6v2h2V4Zm0 3.5v1h2v-1Zm0 2.5v2h2v-2ZM6.5 4v8h3V4Z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 16 16"><path d="M1 3h2v2H1zm4 0h10v2H5zM1 7h2v2H1zm4 0h10v2H5zm-4 4h2v2H1zm4 0h10v2H5z"/></symbol>
+  <symbol id="i-full" viewBox="0 0 16 16"><path d="M1 1h5v2H3v3H1Zm9 0h5v5h-2V3h-3ZM1 10h2v3h3v2H1Zm12 0h2v5h-5v-2h3Z"/></symbol>
+  <symbol id="i-hs" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1.5a5 5 0 0 0-5 5c0 1.7.9 3.2 2.2 4.1V14h5.6v-3.4A5 5 0 0 0 8 1.5Zm0 2.8a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Z"/></symbol>
+</svg>
 
-    <label id="birak" class="birak" tabindex="0">
+<header class="ust">
+  <button class="menu-dugme" id="menuDugme" aria-controls="kenar" aria-expanded="false"><svg class="i"><use href="#i-list"/></svg>Demolar <b id="menuSay">0</b></button>
+  <a class="marka" href="#" aria-label="cs-klip ana sayfa"><span class="marka-cs">cs</span><span>-klip</span></a>
+  <span class="marka-alt">Maç analizi · <span lang="en">Highlight</span> klipleri</span>
+  <span class="ust-bosluk"></span>
+  <button class="durum-hap" id="durumHap" type="button"><span class="nokta"></span><span id="durumMetin">Kontrol…</span></button>
+  <button class="ust-yukle" id="ustYukle" type="button"><svg class="i"><use href="#i-upload"/></svg>Demo yükle</button>
+</header>
+
+<div class="duzen">
+  <aside class="kenar" id="kenar" aria-label="Demolar">
+    <div class="form" id="form"></div>
+
+    <label class="birak" id="birak" tabindex="0">
       <input id="dosyaSec" type="file" accept=".dem,.zst,.gz,.bz2" multiple hidden>
-      <strong>Demo yükle</strong>
-      <span>.dem dosyasını buraya sürükle ya da tıkla</span>
-      <small>.dem · .dem.zst · .dem.gz · .dem.bz2</small>
+      <span class="birak-ikon"><svg class="i"><use href="#i-upload"/></svg></span>
+      <span>
+        <strong>Demo yükle</strong>
+        <span>Dosyayı buraya sürükle ya da tıkla</span>
+        <small>.dem · .dem.zst · .dem.gz · .dem.bz2</small>
+      </span>
     </label>
-    <div id="yukleme" class="yukleme" hidden>
-      <div class="yukleme-ad" id="yuklemeAd"></div>
-      <div class="cubuk"><div id="yuklemeCubuk"></div></div>
-      <div class="yukleme-yuzde" id="yuklemeYuzde"></div>
+    <div class="yukleme" id="yukleme" hidden>
+      <div class="yukleme-ust"><span class="yukleme-ad" id="yuklemeAd"></span><span class="yukleme-yuzde" id="yuklemeYuzde">0%</span></div>
+      <div class="cubuk"><i id="yuklemeCubuk"></i></div>
+      <div class="yukleme-alt" id="yuklemeAlt"></div>
     </div>
 
-    <div class="kenar-baslik">
-      Demolar
-      <button id="yenile" class="ikon-dugme" title="Listeyi yenile" aria-label="Listeyi yenile">↻</button>
+    <div class="kenar-bas"><span>Demolar<em id="demoSay"></em></span>
+      <button class="ikon-dugme" id="yenile" type="button" title="Listeyi yenile" aria-label="Listeyi yenile"><svg class="i"><use href="#i-refresh"/></svg></button>
     </div>
-    <ul id="demolar" class="demolar"></ul>
+    <ul class="demolar" id="demolar"></ul>
+    <p class="kenar-not">Demolar en yeniden eskiye sıralı. Analiz edilmemiş bir demoya tıklayınca istatistikler hesaplanır.</p>
   </aside>
+  <div class="perde" id="perde"></div>
 
-  <main id="ana" class="ana">
-    <div class="bos-durum">
-      <h2>Bir demo seç</h2>
-      <p>Soldaki listeden bir demo seç ya da yeni bir demo yükle.</p>
-    </div>
-  </main>
+  <main class="ana" id="ana"><div class="analiz"><div class="analiz-ic"><div class="yukleyici"></div><h2>Yükleniyor</h2><p>Demolar alınıyor…</p></div></div></main>
 </div>
-<div id="ipucu" class="ipucu" hidden></div>
+
+<div class="ipucu" id="ipucu" role="tooltip"></div>
+<div class="bildirimler" id="bildirimler" aria-live="polite"></div>
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="oyBaslik"></div>
+<div class="birak-perde" id="birakPerde"><div>Demoyu bırak<small>.dem · .dem.zst · .dem.gz · .dem.bz2</small></div></div>
+
 <script src="app.js"></script>
 </body>
 </html>
