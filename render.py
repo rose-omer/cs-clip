@@ -9,14 +9,20 @@ ve klibi çıktı klasörüne taşır.
 import re
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 
 from highlights import TICKRATE
 
 SEQUENCE_RE = re.compile(r"sequence-\d+-tick-(\d+)-to-(\d+)\.mp4$", re.IGNORECASE)
+TIMEOUT_LINE = "Zaman aşımı: CS2 takıldı, kapatıldı"
 # csdm hata satırları; çıkış kodu her zaman güvenilir değil
-FAIL_MARKERS = ("Game error", "Failed to start", "is not installed", "Missing demo", "must have been analyzed")
+FAIL_MARKERS = ("Game error", "Failed to start", "is not installed", "Missing demo", "must have been analyzed",
+                TIMEOUT_LINE)
+# Ölçüm: 41 sn'lik görüntü ~135 sn sürdü (açılış + kayıt + dönüştürme). Takılan CS2'yi bu süreden sonra kapat.
+START_ALLOWANCE = 180
+SECONDS_PER_CLIP_SECOND = 6
 
 
 class DemoFailed(Exception):
@@ -69,17 +75,41 @@ def video_args(
     ]
 
 
-def run_streaming(cmd: list[str], env: dict | None = None) -> tuple[int, list[str]]:
-    """Komutu çalıştırır, çıktısını satır satır gösterir ve toplar."""
+def kill_tree(pid: int) -> None:
+    """Süreci ve açtığı her şeyi (csdm -> CS2) kapatır."""
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+
+
+def run_streaming(cmd: list[str], env: dict | None = None, timeout: float | None = None) -> tuple[int, list[str]]:
+    """Komutu çalıştırır, çıktısını satır satır gösterir ve toplar.
+
+    timeout dolarsa süreç ağacı kapatılır ve çıktıya TIMEOUT_LINE eklenir (takılan CS2 için).
+    """
     lines: list[str] = []
+    timed_out = threading.Event()
     with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
                           text=True, encoding="utf-8", errors="replace") as p:
-        for line in p.stdout:
-            line = line.rstrip()
-            if line:
-                print(f"  [csdm] {line}")
-                lines.append(line)
+        timer = threading.Timer(timeout, lambda: (timed_out.set(), kill_tree(p.pid))) if timeout else None
+        if timer:
+            timer.daemon = True
+            timer.start()
+        try:
+            for line in p.stdout:
+                line = line.rstrip()
+                if line:
+                    print(f"  [csdm] {line}")
+                    lines.append(line)
+        finally:
+            if timer:
+                timer.cancel()
+    if timed_out.is_set():
+        lines.append(TIMEOUT_LINE)
     return p.returncode, lines
+
+
+def record_timeout(clips: list[dict]) -> float:
+    """Kaydın en fazla sürebileceği süre: açılış payı + görüntü süresinin katı."""
+    return START_ALLOWANCE + SECONDS_PER_CLIP_SECOND * sum(clip_seconds(h) for h in clips)
 
 
 def failure(lines: list[str]) -> str | None:
@@ -152,7 +182,8 @@ def record_demo(
         return []
 
     started = time.time() - 1
-    code, lines = runner(video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud), env)
+    cmd = video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud)
+    code, lines = runner(cmd, env, record_timeout([clips[i] for i in todo]))
     err = failure(lines)
     if err or code:
         raise DemoFailed(err or f"csdm çıkış kodu {code}")
