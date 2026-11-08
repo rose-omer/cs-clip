@@ -22,6 +22,7 @@ DEFAULTS = {
     "otomatik_bekle_sn": 120,  # otomatik kayıt: CS2/FACEIT kapandıktan sonra bu kadar bekle
     "faceit_api_anahtari": "",  # FACEIT Data API anahtarı (developers.faceit.com); otomatik.py faceit
     "faceit_kullanici": "",  # FACEIT kullanıcı adı; boşsa "oyuncu"
+    "kayit_sistemi": "CS",  # CSDM kayıt sistemi: "CS" ya da "HLAE"; HLAE kuruluysa CS takılınca son çare olarak denenir
 }
 
 # OBS/netcon dönemi ayarları: eski ayarlar.json bozulmasın diye yok sayılır.
