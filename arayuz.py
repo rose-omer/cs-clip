@@ -23,6 +23,7 @@ from analyze import analyze, save_json
 from config import load_config
 from demofile import find_csgo_dir, open_demo
 from klip import DEMO_SUFFIXES, clip_prefix
+from onarim import is_repaired_copy
 from kontrol import preflight
 from render import clip_seconds, select_clips
 
@@ -63,7 +64,7 @@ class App:
             if not folder.is_dir():
                 continue
             for p in folder.iterdir():
-                if p.is_file() and p.name.lower().endswith(DEMO_SUFFIXES):
+                if p.is_file() and p.name.lower().endswith(DEMO_SUFFIXES) and not is_repaired_copy(p):
                     did = demo_id(p)
                     if did not in found or p.suffix.lower() == ".dem":
                         found[did] = p

@@ -16,7 +16,9 @@ from analyze import analyze, print_report, save_json
 from config import load_config
 from demofile import demo_files, find_csgo_dir, open_demo, to_recycle_bin
 from kontrol import demo_in_db, preflight
+from onarim import ensure_repaired, is_repaired_copy, repaired_path
 from render import (
+    NOT_IN_DB,
     DemoFailed,
     analyze_args,
     clip_filename,
@@ -33,7 +35,8 @@ DEMO_SUFFIXES = (".dem", ".dem.zst", ".dem.gz", ".dem.bz2")
 def collect_demos(target: Path) -> list[Path]:
     if target.is_file():
         return [target]
-    found = [p for p in sorted(target.iterdir()) if p.name.lower().endswith(DEMO_SUFFIXES)]
+    found = [p for p in sorted(target.iterdir())
+             if p.name.lower().endswith(DEMO_SUFFIXES) and not is_repaired_copy(p)]
     # Aynı demonun hem .dem hem .zst hâli varsa .dem yeter.
     names = {p.name.lower() for p in found}
     return [p for p in found if not (p.suffix != ".dem" and p.with_suffix("").name.lower() in names)]
@@ -43,6 +46,13 @@ def clip_prefix(map_name: str, demo: Path) -> str:
     """Klip adının başı: harita + maç kodunun ilk 8 hanesi (de_anubis, 1-59cf10f2-… -> anubis_59cf10f2)."""
     code = demo.stem.split("-")[1] if demo.stem.count("-") >= 2 else demo.stem
     return f"{map_name.removeprefix('de_')}_{code[:8]}"
+
+
+def csdm_analyze(tools: dict, demo: Path) -> str | None:
+    """Demoyu CSDM veritabanına ekler; hata varsa mesajını döner."""
+    print("  CSDM'e ekleniyor…")
+    code, lines = run_streaming(analyze_args(tools["csdm"], demo), tools["env"])
+    return (lines[-1] if lines else f"çıkış kodu {code}") if code else None
 
 
 def print_problems(problems: list[str]) -> None:
@@ -114,20 +124,33 @@ def main() -> None:
     failed: list[tuple[str, str]] = []
     for n, (demo, steamid, prefix, clips) in enumerate(plan, 1):
         print(f"\n[{n}/{len(plan)}] {demo.name}: {len(clips)} klip")
-        if not demo_in_db(tools["pg_bin"], tools["db"], demo, tools["env"]):
-            print("  CSDM'e ekleniyor…")
-            code, lines = run_streaming(analyze_args(tools["csdm"], demo), tools["env"])
-            if code:
-                failed.append((demo.name, lines[-1] if lines else f"çıkış kodu {code}"))
-                continue
+        # İlk FullPacket'i bozuk demolar CS2'yi başa sararken çökertiyor; onarılmış kopyadan kaydet.
+        rec, problems = ensure_repaired(demo)
+        if problems:
+            print(f"  ilk FullPacket onarıldı ({', '.join(problems)}) -> {rec.name}")
+        err = None if demo_in_db(tools["pg_bin"], tools["db"], rec, tools["env"]) else csdm_analyze(tools, rec)
+        if err:
+            failed.append((demo.name, err))
+            continue
         try:
-            made += record_demo(demo, clips, steamid, prefix, out_dir, tools["csdm"], tools["ffmpeg"],
-                                pre, post, cfg["temiz_hud"], env=tools["env"])
+            def record():
+                # Onarılmış demolarda her parça ayrı açılışta: CS2 ikinci atlamada çöküyor.
+                return record_demo(rec, clips, steamid, prefix, out_dir, tools["csdm"], tools["ffmpeg"],
+                                   pre, post, cfg["temiz_hud"], env=tools["env"], per_segment=bool(problems))
+
+            try:
+                made += record()
+            except DemoFailed as e:
+                # Veritabanındaki kayıt dosyanın eski hâline ait olabilir (ör. onarılmış kopya yeniden yazıldı).
+                if NOT_IN_DB not in str(e) or (err := csdm_analyze(tools, rec)):
+                    raise DemoFailed(err or str(e)) from e
+                made += record()
         except DemoFailed as e:
             print(f"  ! Kaydedilemedi: {e}. Sıradaki demoya geçiliyor.")
             failed.append((demo.name, str(e)))
             continue
-        if args.temizle and to_recycle_bin(demo_files(demo)):
+        extra = [repaired_path(demo)] if repaired_path(demo).exists() else []
+        if args.temizle and to_recycle_bin(demo_files(demo) + extra):
             print("  demo dosyaları Geri Dönüşüm Kutusu'na taşındı")
 
     if made and cfg["montaj"]:

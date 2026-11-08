@@ -17,9 +17,10 @@ from highlights import TICKRATE
 
 SEQUENCE_RE = re.compile(r"sequence-\d+-tick-(\d+)-to-(\d+)\.mp4$", re.IGNORECASE)
 TIMEOUT_LINE = "Zaman aşımı: CS2 takıldı, kapatıldı"
+NOT_IN_DB = "Match not found in database"
 # csdm hata satırları; çıkış kodu her zaman güvenilir değil
 FAIL_MARKERS = ("Game error", "Failed to start", "is not installed", "Missing demo", "must have been analyzed",
-                TIMEOUT_LINE)
+                NOT_IN_DB, TIMEOUT_LINE)
 # Ölçüm: 41 sn'lik görüntü ~135 sn sürdü (açılış + kayıt + dönüştürme). Takılan CS2'yi bu süreden sonra kapat.
 START_ALLOWANCE = 180
 SECONDS_PER_CLIP_SECOND = 6
@@ -70,6 +71,16 @@ def video_args(
         "--mode", "player", "--steamids", str(steamid), "--event", "kills",
         "--rounds", ",".join(str(r) for r in sorted(set(rounds))),
         "--start-seconds-before", str(pre), "--end-seconds-after", str(post),
+        "--no-concatenate-sequences", "--recording-system", "CS", "--close-game-after-recording",
+        "--show-only-death-notices" if clean_hud else "--no-show-only-death-notices",
+    ]
+
+
+def segment_args(csdm: Path, demo: Path, steamid: str, start: int, end: int, clean_hud: bool) -> list[str]:
+    """Tek tick aralığını kendi CS2 açılışında kaydeden csdm komutu (tek atlama)."""
+    return [
+        str(csdm), "video", str(demo), str(start), str(end),
+        "--focus-player", str(steamid),
         "--no-concatenate-sequences", "--recording-system", "CS", "--close-game-after-recording",
         "--show-only-death-notices" if clean_hud else "--no-show-only-death-notices",
     ]
@@ -171,8 +182,13 @@ def record_demo(
     clean_hud: bool,
     runner=run_streaming,
     env: dict | None = None,
+    per_segment: bool = False,
 ) -> list[Path]:
-    """Demonun kliplerini tek CS2 açılışında kaydeder; hazır klipleri atlar."""
+    """Demonun kliplerini tek CS2 açılışında kaydeder; hazır klipleri atlar.
+
+    per_segment: her tick aralığı ayrı CS2 açılışında kaydedilir. Onarılmış demolarda CS2 ikinci
+    atlamada (bir klipten sonrakine geçerken) çöküyor; tek atlamada sorunsuz.
+    """
     out_dir = Path(out_dir)
     targets = {i: out_dir / clip_filename(prefix, h) for i, h in enumerate(clips)}
     todo = [i for i, dst in targets.items() if not dst.exists()]
@@ -182,11 +198,19 @@ def record_demo(
         return []
 
     started = time.time() - 1
-    cmd = video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud)
-    code, lines = runner(cmd, env, record_timeout([clips[i] for i in todo]))
-    err = failure(lines)
-    if err or code:
-        raise DemoFailed(err or f"csdm çıkış kodu {code}")
+    if per_segment:
+        runs = [(segment_args(csdm, demo, steamid, a, b, clean_hud), START_ALLOWANCE + SECONDS_PER_CLIP_SECOND
+                 * (b - a) / TICKRATE) for i in todo for a, b in segments(clips[i])]
+    else:
+        runs = [(video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud),
+                 record_timeout([clips[i] for i in todo]))]
+    for k, (cmd, timeout) in enumerate(runs, 1):
+        if per_segment:
+            print(f"  parça {k}/{len(runs)} (tick {cmd[3]}-{cmd[4]})")
+        code, lines = runner(cmd, env, timeout)
+        err = failure(lines)
+        if err or code:
+            raise DemoFailed(err or f"csdm çıkış kodu {code}")
 
     # CSDM çıktı klasörü ayarını her zaman uygulamıyor; demonun klasörüne de bak.
     folders = {Path(demo).parent, out_dir}
