@@ -58,10 +58,20 @@ def find_ffmpeg(override: str = "") -> Path | None:
     return hits[-1] if hits else None
 
 
+PG_ROOT = Path(r"C:\Program Files\PostgreSQL")
+
+
+def local_pg_bin() -> Path:
+    """kurulum.py'nin zip'ten açtığı PostgreSQL (winget kurulumu olmazsa)."""
+    return local_appdata() / "csdm-pg" / "pgsql" / "bin"
+
+
 def find_pg_bin() -> Path | None:
-    hits = sorted(Path(r"C:\Program Files\PostgreSQL").glob("*/bin/pg_isready.exe"),
+    hits = sorted(PG_ROOT.glob("*/bin/pg_isready.exe"),
                   key=lambda p: int(p.parent.parent.name) if p.parent.parent.name.isdigit() else 0)
-    return hits[-1].parent if hits else None
+    if hits:
+        return hits[-1].parent
+    return local_pg_bin() if (local_pg_bin() / "pg_isready.exe").is_file() else None
 
 
 def csdm_database() -> dict | None:
@@ -129,9 +139,9 @@ def preflight(cfg: dict, csgo_dir: Path | None, procs: set[str] | None = None) -
     if tools["ffmpeg"] is None:
         problems.append("ffmpeg bulunamadı: winget install Gyan.FFmpeg")
     if tools["pg_bin"] is None:
-        problems.append("PostgreSQL bulunamadı (CSDM'in veritabanı). YAPILACAKLAR.md → PostgreSQL.")
+        problems.append("PostgreSQL bulunamadı (CSDM'in veritabanı). kur.bat'ı çalıştır.")
     elif tools["db"] is None:
-        problems.append("CSDM ayarları yok (~/.csdm/settings.json). CS Demo Manager'ı bir kez açıp kapat.")
+        problems.append("CSDM ayarları yok (~/.csdm/settings.json). kur.bat'ı çalıştır.")
     elif not pg_ready(tools["pg_bin"], tools["db"]):
         data = Path(cfg["pg_veri_klasoru"]) if cfg["pg_veri_klasoru"] else local_appdata() / "csdm-pg" / "data"
         if start_pg(tools["pg_bin"], data):

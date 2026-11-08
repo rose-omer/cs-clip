@@ -110,3 +110,21 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
   sayılıyor, demo yeniden analiz edilip kayıt bir kez daha deneniyor. Deneme betiği: `araclar\ancient_test.ps1`.
 - CSDM CLI `playback.launchParameters` ayarını kullanmıyor; `--cfg "con_logfile ..."` de dosya yazmadı.
   CS2 tarafını görmek için elle `steam.exe -applaunch 730 -condebug -novid -insecure +playdemo <demo>` kullan.
+
+## 2026-11-08 — tek tıkla kurulum ve Ayarlar sayfası (`kurulum.py`)
+- `kur.bat` artık yalnız Python'u bulur (yoksa `winget install Python.Python.3.12`) ve `kurulum.py`'yi çalıştırır.
+  `kurulum.py` 12 adımı sırayla yapar, her biri önce durumu yoklar: venv, paketler (sürümler `importlib.metadata`
+  ile karşılaştırılır), `ayarlar.json` (oyuncu adı sorulur), FFmpeg, PostgreSQL, CSDM, `initdb --locale=C`, başlatma,
+  `createdb csdm`, CSDM `settings.json`, PATH, testler. `--prova` hiçbir şeyi değiştirmez.
+- PostgreSQL: winget kurucusuna `--extract-only 1` verilir (hizmet ve kurucunun çöken `initdb`'si yok). Bu seçenek
+  gerçek bir bilgisayarda **denenmedi**; programlar çıkmazsa EDB zip'i (`postgresql-17.11-5-windows-x64-binaries.zip`)
+  `%LOCALAPPDATA%\csdm-pg\pgsql`'e açılır, `kontrol.find_pg_bin` orayı da arar.
+- CSDM winget'te yok: GitHub son sürümü, `latest.yml`'deki sha512 ile doğrulanıp `/S` ile sessiz kurulur.
+- CSDM ayarları: dosya yoksa `araclar/csdm-settings.sablon.json` (3.20.1, şema 13); varsa yalnız eksik alanlar,
+  veritabanı bağlantısı ve ffmpeg yolu düzeltilir, eskisi `settings.json.yedek`. Şifre rastgele, düz metin (CSDM öyle istiyor).
+- Kullanıcı klasörü ASCII değilse (ör. `C:\Users\Ömer`) veri klasörü `C:\csdm-pg\data` olur ve `ayarlar.json`'a yazılır.
+- Bu bilgisayarda `kur.bat --prova`: 12 adımın hepsi "zaten kurulu" (worktree'de .venv/ayarlar.json hariç). Gerçek
+  kurulum yeni bir bilgisayarda henüz çalıştırılmadı.
+- Arayüz: `#ayarlar` sayfası, `GET/POST /api/ayarlar` (`config.validate`, `config.save_config`). Oyuncu ya da
+  `once_sn`/`sonra_sn` değişince demoların `.highlights.json` (oyuncu değiştiyse `.stats.json` da) önbelleği silinir.
+  Arayüzden başlatılan kayıt artık arayüzün `--ayarlar` dosyasını kullanıyor (önceden hep `ayarlar.json`).
