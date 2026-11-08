@@ -65,3 +65,14 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
   Ancient `a53a1e7b`'de CS2 10 dk hiç kare yazmadan takıldı, elle kapatıldı.
   Ancient'ta 4 demonun 3'ü kaydedilemedi (yalnız `2dd01012` çalıştı): CS2/CSDM tarafında Ancient'a özgü bir sorun olabilir.
 - Kayda süre sınırı eklendi: 180 sn + görüntü süresinin 6 katı; dolarsa csdm ve CS2 kapatılıp sıradaki demoya geçilir.
+
+### Ancient çökmesi — inceleme (2026-11-08)
+- Çöken demolar (`3dd3d912`, `a53a1e7b`) sorunsuz Dust2/Anubis demolarıyla aynı sürümde (patch 14196). Demo dosyası sorunu değil.
+- 8 çökme dökümünün hepsi Valve'ın kodunda: `engine2.dll+0x10c5b0` / `+0x89222`, `client.dll+0xb01eeb` (access violation).
+  CSDM'siz elle `playdemo` de aynı yerde çöküyor → CSDM ya da bizim kod değil.
+- `-condebug` günlüğü: demo yüklenir, CS2 kendiliğinden başa sarar ("Demo Skipping: skipping to demo tick 0"),
+  ikinci tam güncellemeyi ("non-incremental update") alırken çöker. Dust2 aynı geri sarmayı sorunsuz yapıyor.
+- Denendi, işe yaramadı: `cl_demo_predict 0` (TrueView kapalı). Steam dosya doğrulaması: hiçbir dosya bozuk değil.
+- hub.tcno.co'daki "type 138" düzeltmesi Temmuz 2026 öncesi demolar ve "Failed to parse message" için; bu sorun değil.
+- Sonuç: CS2'nin mevcut sürümünde (ClientVersion 2000942, 4 Kasım 2026) Ancient demolarını geri sararken çıkan bir motor hatası.
+  Bizim taraftan çözülemez; CS2 güncellemesini beklemek ya da Valve'a bildirmek gerekiyor. Araç bu demoları atlayıp devam ediyor.
