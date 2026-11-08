@@ -141,6 +141,32 @@ def test_record_demo_per_segment_launches_once_per_tick_range(tmp_path):
     assert [p.name for p in made] == ["x_R08_3K.mp4", "x_R12_2K.mp4"]
 
 
+def test_record_demo_falls_back_to_segments_and_keeps_good_clips(tmp_path):
+    demo = tmp_path / "m.dem"
+    demo.write_bytes(b"d")
+    out = tmp_path / "klipler"
+    clips = [{**H, "round": 5, "labels": ["2K"], "segments": [[100, 420]]},
+             {**H, "round": 13, "labels": ["2K"], "segments": [[5000, 5320], [6000, 6320]]},
+             {**H, "round": 20, "labels": ["3K"], "segments": [[9000, 9320]]}]
+    calls = []
+
+    def runner(cmd, env, timeout):
+        calls.append(cmd)
+        if "--mode" in cmd:  # tek açılış: bir parça yazıp takılır
+            seq(tmp_path, 2, 100, 420)
+            return 1, ["Recording in progress...", "Zaman aşımı: CS2 takıldı, kapatıldı"]
+        a = int(cmd[3])
+        if a == 6000:  # R13'ün ikinci parçası takılır
+            return 1, ["Zaman aşımı: CS2 takıldı, kapatıldı"]
+        seq(tmp_path, 1, a, int(cmd[4]))
+        return 0, ["Video generated"]
+
+    made = record_demo(demo, clips, "765", "x", out, Path("csdm"), None, 3, 2, True, runner=runner)
+    assert [p.name for p in made] == ["x_R05_2K.mp4", "x_R20_3K.mp4"]
+    assert [c[3] for c in calls[1:]] == ["100", "5000", "6000", "9000"]
+    assert not list(tmp_path.glob("sequence-*.mp4"))  # R13'ün yarım parçası ve tek açılış parçası silindi
+
+
 def test_record_demo_raises_when_game_fails(tmp_path):
     demo = tmp_path / "m.dem"
     demo.write_bytes(b"d")
