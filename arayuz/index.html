@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="ayarlar.css">
 </head>
 <body>
 
@@ -30,6 +31,7 @@
   <symbol id="i-full" viewBox="0 0 16 16"><path d="M1 1h5v2H3v3H1Zm9 0h5v5h-2V3h-3ZM1 10h2v3h3v2H1Zm12 0h2v5h-5v-2h3Z"/></symbol>
   <symbol id="i-star" viewBox="0 0 16 16"><path d="M8 .8l2.2 4.6 5 .6-3.7 3.5 1 5L8 12l-4.5 2.5 1-5L.8 6l5-.6Z"/></symbol>
   <symbol id="i-back" viewBox="0 0 16 16"><path d="M6.6 2.4 1 8l5.6 5.6L8 12.2 4.8 9H15V7H4.8L8 3.8Z"/></symbol>
+  <symbol id="i-ayar" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M6.8.8h2.4l.4 2a5.2 5.2 0 0 1 1.3.7l1.9-.7 1.2 2.1-1.5 1.3a5.4 5.4 0 0 1 0 1.6l1.5 1.3-1.2 2.1-1.9-.7a5.2 5.2 0 0 1-1.3.7l-.4 2H6.8l-.4-2a5.2 5.2 0 0 1-1.3-.7l-1.9.7L2 11.1l1.5-1.3a5.4 5.4 0 0 1 0-1.6L2 6.9l1.2-2.1 1.9.7a5.2 5.2 0 0 1 1.3-.7ZM8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Z"/></symbol>
   <symbol id="i-hs" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1.5a5 5 0 0 0-5 5c0 1.7.9 3.2 2.2 4.1V14h5.6v-3.4A5 5 0 0 0 8 1.5Zm0 2.8a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Z"/></symbol>
 </svg>
 
@@ -38,6 +40,7 @@
   <a class="marka" href="#" aria-label="cs-klip ana sayfa"><span class="marka-cs">cs</span><span>-klip</span></a>
   <span class="marka-alt">Maç analizi · <span lang="en">Highlight</span> klipleri</span>
   <a class="ust-git" id="ustEnIyi" href="#en-iyi"><svg class="i"><use href="#i-star"/></svg>En iyi anlarım</a>
+  <a class="ust-git" id="ustAyarlar" href="#ayarlar"><svg class="i"><use href="#i-ayar"/></svg>Ayarlar</a>
   <span class="ust-bosluk"></span>
   <button class="durum-hap" id="durumHap" type="button"><span class="nokta"></span><span id="durumMetin">Kontrol…</span></button>
   <button class="ust-yukle" id="ustYukle" type="button"><svg class="i"><use href="#i-upload"/></svg>Demo yükle</button>
@@ -48,6 +51,10 @@
     <a class="kenar-git" id="kenarEnIyi" href="#en-iyi">
       <span class="birak-ikon"><svg class="i"><use href="#i-star"/></svg></span>
       <span><strong>En iyi anlarım</strong><small id="kenarEiAlt">Tüm maçlardaki klipler, sıralı</small></span>
+    </a>
+    <a class="kenar-git" id="kenarAyarlar" href="#ayarlar">
+      <span class="birak-ikon"><svg class="i"><use href="#i-ayar"/></svg></span>
+      <span><strong>Ayarlar</strong><small>Oyuncu, klip süreleri, klasörler</small></span>
     </a>
     <div class="form" id="form"></div>
 
@@ -82,6 +89,7 @@
 <div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="oyBaslik"></div>
 <div class="birak-perde" id="birakPerde"><div>Demoyu bırak<small>.dem · .dem.zst · .dem.gz · .dem.bz2</small></div></div>
 
+<script src="ayarlar.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 13,
+  "autoDownloadUpdates": true,
+  "database": {
+    "hostname": "127.0.0.1",
+    "port": 5432,
+    "username": "postgres",
+    "password": "",
+    "database": "csdm"
+  },
+  "folders": [],
+  "autoExtractDemosFromArchives": [],
+  "demos": {
+    "showAllFolders": false,
+    "currentFolderPath": "",
+    "sources": [],
+    "tagIds": [],
+    "types": [],
+    "games": [],
+    "analysisStatus": "all"
+  },
+  "pinnedPlayerSteamId": "",
+  "steamApiKey": "",
+  "faceitApiKey": "",
+  "ui": {
+    "locale": "tr",
+    "theme": "dark",
+    "initialPage": "matches",
+    "redirectDemoToMatch": false,
+    "enableHardwareAcceleration": true
+  },
+  "analyze": {
+    "maxConcurrentAnalyses": 4,
+    "analyzePositions": false
+  },
+  "playback": {
+    "width": 1024,
+    "height": 768,
+    "displayMode": "windowed",
+    "useCustomHighlights": true,
+    "useCustomLowlights": true,
+    "highlights": {
+      "beforeKillDelayInSeconds": 5,
+      "afterKillDelayInSeconds": 2,
+      "includeDamages": false
+    },
+    "lowlights": {
+      "beforeKillDelayInSeconds": 5,
+      "afterKillDelayInSeconds": 2,
+      "includeDamages": false
+    },
+    "round": {
+      "beforeRoundDelayInSeconds": 0,
+      "afterRoundDelayInSeconds": 2,
+      "waitForRoundEnd": false
+    },
+    "launchParameters": "",
+    "useHlae": false,
+    "playerVoicesEnabled": true,
+    "followSymbolicLinks": false,
+    "customCs2SteamRuntimeScriptLocationEnabled": false,
+    "cs2SteamRuntimeScriptPath": ""
+  },
+  "video": {
+    "recordingSystem": "CS",
+    "recordingOutput": "video",
+    "closeGameAfterRecording": true,
+    "concatenateSequences": true,
+    "outputFileName": "",
+    "showXRay": true,
+    "showAssists": true,
+    "showOnlyDeathNotices": true,
+    "deathNoticesDuration": 5,
+    "playerVoicesEnabled": false,
+    "recordAudio": true,
+    "trueView": false,
+    "encoderSoftware": "FFmpeg",
+    "ffmpegSettings": {
+      "audioBitrate": 256,
+      "constantRateFactor": 23,
+      "customLocationEnabled": false,
+      "customExecutableLocation": "",
+      "videoContainer": "mp4",
+      "videoCodec": "libx264",
+      "audioCodec": "aac",
+      "inputParameters": "",
+      "outputParameters": ""
+    },
+    "framerate": 60,
+    "height": 1080,
+    "width": 1920,
+    "outputFolderPath": "",
+    "hlae": {
+      "customLocationEnabled": false,
+      "customExecutableLocation": "",
+      "configFolderEnabled": false,
+      "configFolderPath": ""
+    }
+  },
+  "playerProfile": {
+    "gameModes": [],
+    "games": [],
+    "demoSources": [],
+    "demoTypes": [],
+    "ranking": "all",
+    "tagIds": [],
+    "maxRounds": []
+  },
+  "download": {
+    "downloadValveDemosAtStartup": true,
+    "downloadValveDemosInBackground": true,
+    "downloadFaceitDemosAtStartup": true,
+    "downloadFaceitDemosInBackground": true,
+    "download5EPlayDemosAtStartup": true,
+    "download5EPlayDemosInBackground": true,
+    "downloadRenownDemosAtStartup": true,
+    "downloadRenownDemosInBackground": true
+  },
+  "matches": {
+    "gameModes": [],
+    "demoTypes": [],
+    "demoSources": [],
+    "games": [],
+    "ranking": "all",
+    "tagIds": [],
+    "maxRounds": []
+  },
+  "players": {
+    "bans": [],
+    "tagIds": []
+  },
+  "teams": {},
+  "teamProfile": {
+    "gameModes": [],
+    "games": [],
+    "demoSources": [],
+    "demoTypes": [],
+    "tagIds": [],
+    "maxRounds": []
+  },
+  "ban": {
+    "ignoreBanBeforeFirstSeen": true
+  }
+}

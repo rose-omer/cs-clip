@@ -22,11 +22,40 @@ silah dağılımı ve kliplerin kendisi.
 4. **Göster**: yerel arayüz maç istatistiklerini hesaplar ve klipleri sayfada oynatır.
 
 Ayrıca: kayıt öncesi kontroller (FACEIT/CS2 açık mı, veritabanı, disk), takılan CS2 için süre sınırı, CS2'yi
-çökerten bozuk demoları onaran bir yeniden yazıcı (`onarim.py`, ayrıntı [NOTLAR.md](NOTLAR.md)) ve 78 test.
+çökerten bozuk demoları onaran bir yeniden yazıcı (`onarim.py`, ayrıntı [NOTLAR.md](NOTLAR.md)), tek tıkla kurulum
+ve 150'den fazla test.
 
-Gereken: Windows, Python 3.12, CS2, CS Demo Manager (PostgreSQL ile), FFmpeg.
-Kurulum: **[YAPILACAKLAR.md](YAPILACAKLAR.md)**. Bilinen sorunlar ve ölçümler: [NOTLAR.md](NOTLAR.md).
+Gereken: Windows 10/11 ve CS2. Gerisini (Python, FFmpeg, PostgreSQL, CS Demo Manager) `kur.bat` kurar.
+Bilinen sorunlar ve ölçümler: [NOTLAR.md](NOTLAR.md). İlk kayıt ve sorun giderme: [YAPILACAKLAR.md](YAPILACAKLAR.md).
 `tasarimlar/` klasöründe arayüz için 10 farklı tasarım taslağı var (tek dosyalık HTML).
+
+## Kurulum
+
+1. Projeyi indir: `git clone https://github.com/rose-omer/cs-clip.git C:\cs-clip` (ya da GitHub → Code → Download ZIP).
+   Yolda Türkçe karakter ve boşluk olmaması önerilir.
+2. **`kur.bat`'a çift tıkla.** Oyuncu adını sorar (demodaki adın), sonra sırayla:
+
+   | Adım | Ne yapar | Zaten varsa |
+   |---|---|---|
+   | Python | Python 3.11+ yoksa `winget install Python.Python.3.12` | atlanır |
+   | `.venv` ve paketler | sanal ortam, `requirements.txt` | sürümler tutuyorsa atlanır |
+   | `ayarlar.json` | `ayarlar.ornek.json`'dan, oyuncu adınla | dokunulmaz |
+   | FFmpeg | `winget install Gyan.FFmpeg` | atlanır |
+   | PostgreSQL 17 | `winget` ile yalnız programlar (hizmet kurulmaz; UAC sorarsa Evet). Olmazsa EDB zip'i `%LOCALAPPDATA%\csdm-pg\pgsql`'e açılır | atlanır |
+   | CS Demo Manager | GitHub'daki son sürüm indirilir, özeti doğrulanıp sessiz kurulur | atlanır |
+   | Veritabanı | `initdb --locale=C` ile `%LOCALAPPDATA%\csdm-pg\data` (Türkçe Windows'ta kurucunun `initdb` çökmesini aşar), rastgele şifre, 5432 doluysa sonraki port | atlanır |
+   | Başlatma, `csdm` veritabanı | `pg_ctl start`, `createdb csdm` | atlanır |
+   | CSDM ayarları | `%USERPROFILE%\.csdm\settings.json`: veritabanı bağlantısı + şifre, ffmpeg yolu; eksik alanlar şablondan. Değişirse eskisi `settings.json.yedek` | yalnız eksik/yanlış alanlar |
+   | PATH | PostgreSQL `bin` kullanıcı PATH'ine (psql) | atlanır |
+   | Testler | `pytest -q` | — |
+
+   Son satırda `Kurulum tamam.` yazmalı. Bir adım olmazsa ne yapılacağı yazılır; düzeltip `kur.bat`'ı yeniden
+   çalıştır, biten adımlar atlanır.
+3. `klip.bat --kontrol` → `Her şey hazır`. Sonra `arayuz.bat`.
+
+`kur.bat --prova` hiçbir şeyi değiştirmeden ne yapacağını gösterir. Diğer seçenekler: `--oyuncu AD` (sormadan),
+`--test-yok`. PostgreSQL Windows hizmeti olarak kurulmaz: bilgisayar yeniden başlayınca kapalı kalır, `klip.bat` ve
+arayüz kayıttan önce kendisi başlatır.
 
 ## Arayüz
 
@@ -36,6 +65,9 @@ Kurulum: **[YAPILACAKLAR.md](YAPILACAKLAR.md)**. Bilinen sorunlar ve ölçümler
 - Demo seçince maç istatistikleri: skor, rating, ADR, K/D/A, KAST, HS%, açılış kill'leri, iki takımın skor tablosu, round çizelgesi, silahlar.
 - Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı).
 - İlk açılışta istatistik hesaplanır ve demonun yanına `.stats.json` olarak saklanır; sonraki açılışlar anında.
+- **Ayarlar** sayfası (`#ayarlar`): oyuncu, en düşük puan, maç başına klip, klip öncesi/sonrası süre, temiz HUD,
+  montaj, klip ve demo klasörleri, araç yolları. Değerler doğrulanıp `ayarlar.json`'a yazılır (`GET/POST /api/ayarlar`).
+  Oyuncu ya da süreler değişince maçların analizi yeniden yapılır.
 
 ## Komutlar
 
@@ -84,12 +116,13 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | `analyze.py` | Demoyu okur (demoparser2) |
 | `demofile.py` | Sıkıştırılmış demoyu açar, CS2 klasörünü bulur, Geri Dönüşüm Kutusu |
 | `render.py` | CSDM ile kayıt, parçaları round'a atama, birleştirme, montaj |
+| `kur.bat`, `kurulum.py` | Tek tıkla kurulum (`--prova`: değiştirmeden göster) |
 | `kontrol.py` | Kayıt öncesi kontroller, PostgreSQL başlatma |
 | `onarim.py` | Başa sarınca CS2'yi çökerten demoların ilk tam paketini onarır |
 | `stats.py` | Maç istatistikleri (rating, ADR, KAST, round çizelgesi) |
-| `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa |
-| `config.py` | `ayarlar.json` okur |
-| `araclar/` | Hız ölçüm ve deneme script'leri |
+| `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa (`ayarlar.js`: Ayarlar sayfası) |
+| `config.py` | `ayarlar.json` okur, doğrular, yazar |
+| `araclar/` | Hız ölçüm ve deneme script'leri, CSDM ayar şablonu |
 | `tasarimlar/` | Arayüz tasarım taslakları |
 | `docs/` | Ekran görüntüleri |
 | `test_*.py` | Testler: `.venv\Scripts\python -m pytest -q` |
