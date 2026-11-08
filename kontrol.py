@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 MIN_FREE_GB = 10  # CS2 kareleri kayıt sırasında TGA olarak diske yazılır
@@ -56,6 +57,28 @@ def find_ffmpeg(override: str = "") -> Path | None:
     pkgs = local_appdata() / "Microsoft" / "WinGet" / "Packages"
     hits = sorted(pkgs.glob("Gyan.FFmpeg*/*/bin/ffmpeg.exe")) if pkgs.is_dir() else []
     return hits[-1] if hits else None
+
+
+def find_hlae() -> Path | None:
+    """CSDM'in kullandığı hlae.exe: ayarlarda özel konum ya da ~/.csdm/hlae (CSDM arayüzünden kurulan)."""
+    try:
+        s = json.loads((Path.home() / ".csdm" / "settings.json").read_text(encoding="utf-8"))["video"]["hlae"]
+        custom = Path(s["customExecutableLocation"]) if s.get("customLocationEnabled") else None
+    except (OSError, ValueError, KeyError, TypeError):
+        custom = None
+    exe = custom if custom and custom.name else Path.home() / ".csdm" / "hlae" / "hlae.exe"
+    return exe if exe.is_file() else None
+
+
+def wait_cs2_closed(timeout: float = 30, procs=running_processes, sleep=time.sleep) -> bool:
+    """CS2 kapanana kadar bekler (kapatmaz). Önceki kaydın CS2'si hâlâ çıkıyorsa yeni açılış takılabilir."""
+    end = time.monotonic() + timeout
+    while "cs2.exe" in procs():
+        if time.monotonic() >= end:
+            print("  ! CS2 hâlâ açık; kapatılmadı, bu deneme atlandı.")
+            return False
+        sleep(1)
+    return True
 
 
 def find_pg_bin() -> Path | None:
@@ -122,10 +145,16 @@ def preflight(cfg: dict, csgo_dir: Path | None, procs: set[str] | None = None) -
         "ffmpeg": find_ffmpeg(cfg["ffmpeg_yolu"]),
         "pg_bin": find_pg_bin(),
         "db": csdm_database(),
+        "hlae": find_hlae(),
     }
     if tools["csdm"] is None:
         problems.append("CS Demo Manager bulunamadı. Kur: github.com/akiver/cs-demo-manager/releases "
                         "(ya da ayarlar.json → csdm_yolu).")
+    if cfg.get("kayit_sistemi", "CS") not in ("CS", "HLAE"):
+        problems.append(f"ayarlar.json → kayit_sistemi \"{cfg['kayit_sistemi']}\" olamaz: \"CS\" ya da \"HLAE\".")
+    elif cfg.get("kayit_sistemi") == "HLAE" and tools["hlae"] is None:
+        problems.append("HLAE kurulu değil. CS Demo Manager → Settings → Video → HLAE → Install "
+                        "(ya da ayarlar.json → kayit_sistemi \"CS\").")
     if tools["ffmpeg"] is None:
         problems.append("ffmpeg bulunamadı: winget install Gyan.FFmpeg")
     if tools["pg_bin"] is None:

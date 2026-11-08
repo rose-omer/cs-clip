@@ -17,6 +17,7 @@ DEFAULTS = {
     "ffmpeg_yolu": "",  # boşsa PATH ve winget klasörü aranır
     "pg_veri_klasoru": "",  # boşsa %LOCALAPPDATA%\csdm-pg\data
     "demo_klasorleri": [],  # arayüzün demo aradığı klasörler; boşsa İndirilenler + demos/
+    "kayit_sistemi": "CS",  # CSDM kayıt sistemi: "CS" ya da "HLAE"; HLAE kuruluysa CS takılınca son çare olarak denenir
 }
 
 # OBS/netcon dönemi ayarları: eski ayarlar.json bozulmasın diye yok sayılır.

@@ -24,6 +24,16 @@ FAIL_MARKERS = ("Game error", "Failed to start", "is not installed", "Missing de
 # Ölçüm: 41 sn'lik görüntü ~135 sn sürdü (açılış + kayıt + dönüştürme). Takılan CS2'yi bu süreden sonra kapat.
 START_ALLOWANCE = 180
 SECONDS_PER_CLIP_SECOND = 6
+# CS2'nin o parçada çökmesi/takılması: başka başlangıçla yeniden denenir. Diğer hatalar (demo yok,
+# veritabanında yok, CS2 kurulu değil) her denemede aynı çıkar.
+RETRYABLE = ("Game error", TIMEOUT_LINE)
+RECORDING_SYSTEMS = ("CS", "HLAE")
+# CSDM tek aralık kaydında "demo_gototick <başlangıç - 65>" yapar (kurulum tick'i başlangıç - 64, bir öncesine atlar).
+# CS2 bu tick'ten önceki son FullPacket'i yükleyip oradan ileri oynatır.
+GOTO_LEAD = 65
+FULLPACKET_MARGIN = 32  # önceki FullPacket'e düşmek için hedefin paketin bu kadar önünde olması
+LONG_PRE_SECONDS = 5
+MAX_EXTRA_SECONDS = 12  # yeniden denemede baştan fazladan kaydedilip kesilecek en uzun süre (TGA diski şişirir)
 
 
 class DemoFailed(Exception):
@@ -63,7 +73,8 @@ def analyze_args(csdm: Path, demo: Path) -> list[str]:
 
 
 def video_args(
-    csdm: Path, demo: Path, steamid: str, rounds: list[int], pre: float, post: float, clean_hud: bool
+    csdm: Path, demo: Path, steamid: str, rounds: list[int], pre: float, post: float, clean_hud: bool,
+    system: str = "CS",
 ) -> list[str]:
     """Tüm round'ları tek CS2 açılışında kaydeden csdm komutu."""
     return [
@@ -71,21 +82,79 @@ def video_args(
         "--mode", "player", "--steamids", str(steamid), "--event", "kills",
         "--rounds", ",".join(str(r) for r in sorted(set(rounds))),
         "--start-seconds-before", str(pre), "--end-seconds-after", str(post),
-        "--no-concatenate-sequences", "--recording-system", "CS", "--close-game-after-recording",
+        "--no-concatenate-sequences", "--recording-system", system, "--close-game-after-recording",
         "--show-only-death-notices" if clean_hud else "--no-show-only-death-notices",
         "--no-player-voices",  # sesli sohbet kliplere girmesin
     ]
 
 
-def segment_args(csdm: Path, demo: Path, steamid: str, start: int, end: int, clean_hud: bool) -> list[str]:
+def segment_args(
+    csdm: Path, demo: Path, steamid: str, start: int, end: int, clean_hud: bool, system: str = "CS"
+) -> list[str]:
     """Tek tick aralığını kendi CS2 açılışında kaydeden csdm komutu (tek atlama)."""
     return [
         str(csdm), "video", str(demo), str(start), str(end),
         "--focus-player", str(steamid),
-        "--no-concatenate-sequences", "--recording-system", "CS", "--close-game-after-recording",
+        "--no-concatenate-sequences", "--recording-system", system, "--close-game-after-recording",
         "--show-only-death-notices" if clean_hud else "--no-show-only-death-notices",
         "--no-player-voices",  # sesli sohbet kliplere girmesin
     ]
+
+
+def fullpacket_before(tick: int, fullpackets: list[int]) -> int | None:
+    """CS2'nin demo_gototick <tick>'te yüklediği FullPacket (tick'ten önceki son paket)."""
+    return max((t for t in fullpackets if t <= tick), default=None)
+
+
+def retry_starts(start: int, fullpackets: list[int]) -> list[tuple[str, int]]:
+    """Parça için denenecek başlangıç tick'leri: [(açıklama, tick)], ilki asıl başlangıç.
+
+    Yeniden denemeler CS2'yi başka bir FullPacket'ten başlatır: ya hedefin önceki paketinden
+    (başlangıç paketin hemen önüne çekilir) ya da birkaç saniye erken. Erken başlangıçta fazladan
+    kaydedilen baş kısım sonradan kesilir; MAX_EXTRA_SECONDS'tan uzunu denenmez.
+    FullPacket listesi yoksa yalnız erken başlangıç denenir; hiçbiri olmuyorsa aynı başlangıç bir kez daha.
+    """
+    out = [("aynı başlangıç", start)]
+    window = fullpacket_before(start - GOTO_LEAD, fullpackets)
+    candidates = []
+    if window is not None:
+        candidates.append(("önceki tam paketten", window + GOTO_LEAD - FULLPACKET_MARGIN))
+    candidates.append((f"{LONG_PRE_SECONDS} sn erken", start - LONG_PRE_SECONDS * TICKRATE))
+    tried = {window}
+    for label, tick in candidates:
+        if not 0 < start - tick <= MAX_EXTRA_SECONDS * TICKRATE or tick - GOTO_LEAD < 1:
+            continue
+        w = fullpacket_before(tick - GOTO_LEAD, fullpackets)
+        if fullpackets and w in tried:
+            continue  # aynı paketten başlar, öncekinden farkı yok
+        tried.add(w)
+        out.append((label, tick))
+    if len(out) == 1:
+        # Takılma çoğu zaman demo daha oynamadan, açılışta oluyor (NOTLAR.md); düz bir tekrar da şans.
+        out.append(("aynı başlangıç, yeniden", start))
+    return out
+
+
+def attempts(start: int, fullpackets: list[int], system: str, hlae_fallback: bool) -> list[tuple[str, int, str]]:
+    """Parçanın kayıt denemeleri: [(açıklama, başlangıç, kayıt sistemi)]."""
+    out = [(label, tick, system) for label, tick in retry_starts(start, fullpackets)]
+    if hlae_fallback and system != "HLAE":
+        out.append(("HLAE ile", start, "HLAE"))
+    return out
+
+
+def retryable(err: str) -> bool:
+    return any(m in err for m in RETRYABLE)
+
+
+def trim_lead(path: Path, seconds: float, ffmpeg: Path) -> Path:
+    """Videonun ilk `seconds` saniyesini keser (yeniden kodlar; kopyalamak anahtar kareye yuvarlar)."""
+    tmp = path.with_name(path.stem + ".kesik.mp4")
+    subprocess.run([str(ffmpeg), "-y", "-loglevel", "error", "-ss", f"{seconds:.3f}", "-i", str(path),
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "fast",
+                    "-c:a", "aac", "-b:a", "256k", str(tmp)], check=True)
+    tmp.replace(path)
+    return path
 
 
 def kill_tree(pid: int) -> None:
@@ -186,6 +255,10 @@ def record_demo(
     env: dict | None = None,
     per_segment: bool = False,
     fallback: bool = True,
+    fullpackets: list[int] | None = None,
+    system: str = "CS",
+    hlae_fallback: bool = False,
+    wait_game=None,
 ) -> list[Path]:
     """Demonun kliplerini tek CS2 açılışında kaydeder; hazır klipleri atlar.
 
@@ -193,7 +266,14 @@ def record_demo(
     atlamada (bir klipten sonrakine geçerken) çöküyor ya da takılıyor; tek atlamada sorunsuz.
     Parçası kaydedilemeyen klip atlanır, diğerleri korunur.
     fallback: tek açılış çöker/takılırsa parça parça yeniden dener.
+    Parça parça kayıtta CS2 bir parçada çöker/takılırsa parça başka başlangıçla yeniden denenir
+    (retry_starts; fullpackets: demonun FullPacket tick'leri), hlae_fallback ise son olarak HLAE ile.
+    system: CSDM kayıt sistemi ("CS" ya da "HLAE").
+    wait_game: her CS2 açılışından önce çağrılır; False dönerse (önceki CS2 kapanmadı) açılmaz.
     """
+    if system not in RECORDING_SYSTEMS:
+        raise ValueError(f"kayıt sistemi {system!r}; olabilecekler: {', '.join(RECORDING_SYSTEMS)}")
+    fullpackets = fullpackets or []
     out_dir = Path(out_dir)
     targets = {i: out_dir / clip_filename(prefix, h) for i, h in enumerate(clips)}
     todo = [i for i, dst in targets.items() if not dst.exists()]
@@ -212,10 +292,45 @@ def record_demo(
         err = failure(lines)
         return err or (f"csdm çıkış kodu {code}" if code else None)
 
+    def record_segment(a: int, b: int) -> str | None:
+        """Parçayı kaydeder; CS2 çöker/takılırsa başka başlangıçla yeniden dener. Hata yoksa None."""
+        err = None
+        tries = attempts(a, fullpackets, system, hlae_fallback)
+        for n, (label, start, rec_system) in enumerate(tries):
+            if n:
+                print(f"  yeniden deneme {n}/{len(tries) - 1}: {label} (tick {start}, {rec_system})")
+            if wait_game is not None and not wait_game():
+                return err or "CS2 kapanmadı, kayıt başlatılamadı"
+            before = set(new_parts(started))
+            err = run(segment_args(csdm, demo, steamid, start, b, clean_hud, rec_system),
+                      START_ALLOWANCE + SECONDS_PER_CLIP_SECOND * (b - start) / TICKRATE)
+            fresh = set(new_parts(started)) - before
+            if not err:
+                for p in fresh if start < a else ():
+                    fix_lead(p, start, a)
+                return None
+            for p in fresh:  # yarım kalan denemenin parçası
+                p.unlink(missing_ok=True)
+            if not retryable(err):
+                return err
+            print(f"  ! tick {start}: {err}")
+        return err
+
+    def fix_lead(p: Path, start: int, a: int) -> None:
+        """Erken başlatılan parçanın fazladan baş kısmını keser, adını asıl başlangıca çeker."""
+        if ffmpeg is None:
+            print(f"  ! ffmpeg yok: {p.name} baştan {(a - start) / TICKRATE:.1f} sn uzun kaldı")
+            return
+        trim_lead(p, (a - start) / TICKRATE, ffmpeg)
+        if part_tick(p) == start:
+            p.replace(p.with_name(p.name.replace(f"-tick-{start}-", f"-tick-{a}-")))
+
     started = time.time() - 1
     if not per_segment:
-        err = run(video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud),
-                  record_timeout([clips[i] for i in todo]))
+        if wait_game is not None and not wait_game():
+            raise DemoFailed("CS2 kapanmadı, kayıt başlatılamadı")
+        err = run(video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud,
+                             system), record_timeout([clips[i] for i in todo]))
         if err:
             if not fallback or NOT_IN_DB in err:
                 raise DemoFailed(err)
@@ -233,8 +348,7 @@ def record_demo(
                 if i in failed:
                     continue
                 print(f"  parça {k}/{total} (tick {a}-{b})")
-                err = run(segment_args(csdm, demo, steamid, a, b, clean_hud),
-                          START_ALLOWANCE + SECONDS_PER_CLIP_SECOND * (b - a) / TICKRATE)
+                err = record_segment(a, b)
                 if err:
                     if NOT_IN_DB in err:
                         raise DemoFailed(err)

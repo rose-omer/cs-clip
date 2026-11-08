@@ -142,3 +142,14 @@ def test_main_kontrol_does_not_write(tmp_path):
     assert d.main([str(p), "--kontrol"]) == 1
     assert not (tmp_path / "mac.onarilmis.dem").exists()
     assert d.main([str(p)]) == 0 and (tmp_path / "mac.onarilmis.dem").exists()
+
+
+def test_fullpacket_ticks_lists_every_fullpacket():
+    b = demo((d.DEM_FULLPACKET, 1, HEALTHY_FP), (7, 2, b"pkt"), (d.DEM_FULLPACKET, 3841, LATER_FP),
+             (d.DEM_FULLPACKET | d.COMPRESSED, 7681, snappy_literal(LATER_FP)))
+    assert d.fullpacket_ticks(b) == [1, 3841, 7681]
+
+
+def test_fullpacket_ticks_rejects_non_cs2_file():
+    with pytest.raises(ValueError):
+        d.fullpacket_ticks(b"HL2DEMO\0" + b"\0" * 16)

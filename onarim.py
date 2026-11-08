@@ -285,6 +285,24 @@ def first_fullpacket(b: bytes):
     return None
 
 
+def fullpacket_ticks(b: bytes) -> list[int]:
+    """Demodaki FullPacket'lerin tick'leri. CS2 demo_gototick'te hedeften önceki son FullPacket'ten başlar."""
+    if b[:8] != MAGIC:
+        raise ValueError("CS2 demosu değil (PBDEMS2 başlığı yok)")
+    i, out = 16, []
+    while i < len(b):
+        cmd, i = read_varint(b, i)
+        tick, i = read_varint(b, i)
+        n, i = read_varint(b, i)
+        c = cmd & ~COMPRESSED
+        if c == DEM_FULLPACKET:
+            out.append(tick)
+        elif c == DEM_STOP:
+            break
+        i += n
+    return out
+
+
 def find_problems(b: bytes) -> list[str]:
     """Değiştirmeden ilk FullPacket'teki sorunları listeler (boşsa onarım gerekmez)."""
     fp = first_fullpacket(b)
