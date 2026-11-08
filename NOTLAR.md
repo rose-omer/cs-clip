@@ -76,25 +76,33 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
 - hub.tcno.co'daki "type 138" düzeltmesi Temmuz 2026 öncesi demolar ve "Failed to parse message" için; bu sorun değil.
 - Sonuç: CS2'nin mevcut sürümünde (ClientVersion 2000942, 4 Kasım 2026) Ancient demolarını geri sararken çıkan bir motor hatası.
   Bizim taraftan çözülemez; CS2 güncellemesini beklemek ya da Valve'a bildirmek gerekiyor. Araç bu demoları atlayıp devam ediyor.
-  (Bu sonuç aşağıdaki demo içi incelemeyle düzeltildi: `3dd3d912`'de demo dosyasında somut bir anormallik var.)
+  (Bu sonuç yanlış çıktı: sorun demonun ilk FullPacket'inde, aşağıya bak.)
 
-### Ancient çökmesi — demo içi inceleme ve onarım (2026-11-08, CS2 açılmadan)
+### Ancient çökmesi — demo içi inceleme ve çözüm (2026-11-08)
 - Demo yapısı (komut türleri, 3840 tick'te bir FullPacket, tick sıçraması, SendTables/ClassInfo) 5 demoda aynı.
-- `3dd3d912`'nin ilk FullPacket'i (tick 1, CS2'nin başa sararken yüklediği paket) farklı: içinde `instancebaseline`/
-  `AnimAssetData` tabloları ve bir `svc_UserCommands` (76) mesajı var; diğer demolarda tick 1 FullPacket'te yalnız
-  `userinfo` tablosu, Tick ve PacketEntities var. Başlıkta da `server_start_tick` 6013 ve `server_count` 5 (Dust2'de 2).
-- O `svc_UserCommands` tek girdili ve bayat: slot 0, komut 44, komut tick'i 627, beklenen tick 6014 (fark 5387).
-  Sağlam demoların FullPacket'lerindeki 1000+ komut girdisinde fark en çok birkaç tick. Çökme günlüğündeki son satırlar:
-  `full command 44 for slot 0 replaces newer baseline 5423` → `Receiving 22.7K non-incremental update` → çökme.
-  Dust2 günlüğünde bu "replaces newer baseline" satırı yok. Yani çökmeyi bu bayat komut tetikliyor olmalı.
-- Tüm FullPacket taraması (tick farkı > 128): `3dd3d912` 1 (tick 1'de), `59cf10f2` 1 (tick 57601'de, fark 1184; o demo
-  kaydedilebildi), `a53a1e7b`, `a95f6ac2`, `797f8ecc` 0.
-- `a53a1e7b`'de bu anormallik yok. O demo çökmedi, CSDM'de 10 dk kare yazmadan takıldı; elle `playdemo` ile hiç
-  denenmedi, günlüğü yok. Sebebi hâlâ bilinmiyor.
-- Aday onarım: `araclar/demo_onar.py <demo.dem>` FullPacket'lerdeki bayat komut girdilerini siler (girdisi kalmayan
-  mesajı tamamen), gerisini bayt bayt kopyalar ve `<ad>.onarilmis.dem` yazar. Orijinale dokunmaz. `--kontrol` yalnız bakar.
-  `3dd3d912` için doğrulandı: 93002 mesajın yalnız FullPacket@1'i değişti, tablolar ve diğer mesajlar aynı,
-  başlık ofsetleri kaydırıldı, demoparser2 iki dosyada da aynı 122 kill'i görüyor.
-- Henüz CS2'de denenmedi (kullanıcı maçtaydı). Deneme: CS2 ve FACEIT kapalıyken
-  `powershell -ExecutionPolicy Bypass -File araclar\ancient_test.ps1` (açık bir şey görürse kapatmaz, çıkar).
-  Çalışırsa sonraki adım: `klip.py` kayıttan önce `find_stale` ile kontrol edip onarılmış kopyadan kaydetsin.
+  Yükleme sırası (spawn group) da sebep değil: Anubis'te de gökyüzü kutusu 8. sırada ve sorunsuz.
+- Çöken `3dd3d912`'nin ilk FullPacket'i (tick 1; CS2 her demonun başında tick 0'a sararken bunu ikinci kez uygular)
+  farklı: içinde `instancebaseline`/`AnimAssetData` tabloları ve bir `svc_UserCommands` (76) mesajı var. Sağlam
+  demolarda (Dust2, Anubis, diğer Ancient) bu pakette yalnız `userinfo` tablosu, Tick ve PacketEntities var.
+  Başlıkta `server_start_tick` 6013, `server_count` 5 (Dust2'de 2): sunucu kaydı geç ve harita yenilemeleri sonrası başlatmış.
+- CS2'de denenen varyantlar (`-condebug` + elle `playdemo`):
+  - Yalnız bayat `svc_UserCommands` girdisini silmek (komut tick'i 627, beklenen 6014): yine `engine2.dll+0x10c5b0`'da çöktü.
+  - İlk FullPacket'i tamamen silmek: çökmedi ama başa sarma 3841'deki pakete gidip takıldı.
+  - İlk FullPacket'i sağlam biçime getirmek (yalnız `userinfo`, UserCommands yok): "Demo Skipping finished at tick 0",
+    demo sorunsuz oynuyor. **Çözüm bu.**
+- `a53a1e7b` (diğer "bozuk" Ancient) elle `playdemo` ile sorunsuz oynuyor; ilk FullPacket'i de sağlam. CSDM'deki
+  10 dk takılmanın sebebi başka; tekrar denenmeli.
+- CSDM ile kayıt: başa sarma artık geçiyor, CSDM 46081'e atlayıp ilk klibi kaydediyor, ama bir sonraki klibe
+  (47690) atlarken yine `engine2.dll+0x10c5b0`'da çöküyor (CSDM eklenti günlüğü: `game\bin\win64\csdm.log`).
+  Sonraki FullPacket'lerden UserCommands'ı silmek de işe yaramadı. Aynı parça (47755–48075) ayrı bir CS2
+  açılışında, tek atlamayla sorunsuz kaydedildi. Yani bu demoda CS2 ilk atlamada sağlam, ikincide çöküyor.
+- Kod: `onarim.py` ilk FullPacket'te fazlalık varsa ilk paketi sağlam biçime getirir, diğer FullPacket'lerden
+  UserCommands'ı çıkarır (yalnız TrueView kullanıyor, CSDM zaten kapatıyor), gerisini bayt bayt kopyalayıp
+  `<ad>.onarilmis.dem` yazar. Sağlam demolara dokunmaz. `klip.py` kayıttan önce bunu kendisi yapar ve onarılmış
+  demoyu **her tick aralığı ayrı CS2 açılışında** kaydeder (`csdm video <demo> <başlangıç> <bitiş> --focus-player`);
+  sağlam demolar eskisi gibi tek açılışta. Arayüz ve klasör taraması kopyayı ayrı maç saymaz, `--temizle` kopyayı da
+  çöpe atar. Elle: `python onarim.py <demo.dem> [--kontrol]`.
+- CSDM veritabanında aynı yolun eski hâli kayıtlıysa `csdm video` "Match not found in database" der; bu artık hata
+  sayılıyor, demo yeniden analiz edilip kayıt bir kez daha deneniyor. Deneme betiği: `araclar\ancient_test.ps1`.
+- CSDM CLI `playback.launchParameters` ayarını kullanmıyor; `--cfg "con_logfile ..."` de dosya yazmadı.
+  CS2 tarafını görmek için elle `steam.exe -applaunch 730 -condebug -novid -insecure +playdemo <demo>` kullan.

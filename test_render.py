@@ -68,6 +68,7 @@ def test_video_args_records_all_rounds_in_one_launch():
 def test_failure_finds_error_line():
     assert failure(["Starting Counter-Strike...", "Game error"]) == "Game error"
     assert failure(["Video generated in C:\\x"]) is None
+    assert failure(["Match not found in database. Make sure the demo has been analyzed."])
 
 
 def seq(tmp, n, a, b):
@@ -105,6 +106,39 @@ def test_record_demo_moves_single_parts_and_skips_existing(tmp_path):
     assert calls[0][calls[0].index("--rounds") + 1] == "9"
     assert (out / "x_R05_2K.mp4").read_bytes() == b"old"
     assert not list(tmp_path.glob("sequence-*.mp4"))
+
+
+def test_record_demo_per_segment_launches_once_per_tick_range(tmp_path):
+    demo = tmp_path / "m.dem"
+    demo.write_bytes(b"d")
+    out = tmp_path / "klipler"
+    clips = [{**H, "round": 8, "labels": ["3K"], "segments": [[100, 420], [1700, 2020]]},
+             {**H, "round": 12, "labels": ["2K"], "segments": [[5000, 5528]]}]
+    calls = []
+
+    def runner(cmd, env, timeout):
+        calls.append(cmd)
+        seq(tmp_path, 1, int(cmd[3]), int(cmd[4]))  # CSDM her açılışta sequence-1 yazar
+        return 0, ["Video generated"]
+
+    def fake_join(parts, dst, ffmpeg):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(b"".join(p.read_bytes() for p in parts))
+        for p in parts:
+            p.unlink()
+        return dst
+
+    import render
+    orig = render.join_parts
+    render.join_parts = fake_join
+    try:
+        made = record_demo(demo, clips, "765", "x", out, Path("csdm"), None, 3, 2, True, runner=runner,
+                           per_segment=True)
+    finally:
+        render.join_parts = orig
+    assert [c[3:5] for c in calls] == [["100", "420"], ["1700", "2020"], ["5000", "5528"]]
+    assert all(c[c.index("--focus-player") + 1] == "765" and "--mode" not in c for c in calls)
+    assert [p.name for p in made] == ["x_R08_3K.mp4", "x_R12_2K.mp4"]
 
 
 def test_record_demo_raises_when_game_fails(tmp_path):
