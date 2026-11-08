@@ -159,6 +159,8 @@ def main() -> None:
     print(f"\n{len(made)} yeni klip: {out_dir.resolve()}")
     for name, why in failed:
         print(f"  ! {name}: {why}")
+    if failed and not made:
+        raise SystemExit(1)  # hiçbir demo kaydedilemedi: arayüz bunu hata olarak göstersin
 
 
 if __name__ == "__main__":
