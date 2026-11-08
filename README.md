@@ -1,5 +1,7 @@
 # cs-klip
 
+[![testler](https://github.com/rose-omer/cs-clip/actions/workflows/testler.yml/badge.svg)](https://github.com/rose-omer/cs-clip/actions/workflows/testler.yml)
+
 CS2 maç demolarından senin en iyi anlarını bulan, puanlayan ve CS2'nin içinde otomatik `.mp4` klip olarak kaydeden
 bir araç. Yanında Leetify benzeri yerel bir maç analizi arayüzü var: rating, ADR, KAST, skor tablosu, round geçmişi,
 silah dağılımı ve kliplerin kendisi.
