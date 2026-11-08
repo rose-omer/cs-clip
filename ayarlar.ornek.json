@@ -10,5 +10,8 @@
   "csgo_klasoru": "",
   "csdm_yolu": "",
   "ffmpeg_yolu": "",
-  "pg_veri_klasoru": ""
+  "pg_veri_klasoru": "",
+  "otomatik_bekle_sn": 120,
+  "faceit_api_anahtari": "",
+  "faceit_kullanici": ""
 }

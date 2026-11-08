@@ -1,6 +1,6 @@
 """cs-klip arayüzü: demo yükle, istatistikleri ve klipleri tarayıcıda gör.
 
-Kullanım:  python arayuz.py [--port 8765] [--tarayici-acma]
+Kullanım:  python arayuz.py [--port 8765] [--tarayici-acma] [--otomatik]
 Yalnız bu bilgisayardan erişilir (127.0.0.1). Sayfa arayuz/ klasöründen sunulur.
 """
 
@@ -21,11 +21,12 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import eniyi
+import otomatik
 import render
 from analyze import analyze, save_json
 from config import load_config
 from demofile import find_csgo_dir, open_demo
-from klip import DEMO_SUFFIXES, clip_prefix
+from klip import DEMO_SUFFIXES, clip_prefix, demo_id
 from onarim import is_repaired_copy
 from kontrol import find_ffmpeg, preflight
 from render import clip_seconds, select_clips
@@ -35,14 +36,6 @@ WEB = ROOT / "arayuz"
 UPLOADS = ROOT / "demos"
 CHUNK = 1 << 20
 LOG_LINES = 40
-
-
-def demo_id(path: Path) -> str:
-    name = path.name
-    for s in sorted(DEMO_SUFFIXES, key=len, reverse=True):
-        if name.lower().endswith(s):
-            return name[: -len(s)]
-    return path.stem
 
 
 def match_code(did: str) -> str:
@@ -59,6 +52,8 @@ class App:
         self.lock = threading.Lock()
         self.job = {"durum": "bos", "mesaj": "", "satirlar": [], "demo": None}
         self.montage_lock = threading.Lock()
+        self.kilit = otomatik.KILIT  # otomatik kuyrukla paylaşılan kayıt kilidi
+        self.oto_dosya = otomatik.DURUM_DOSYASI
 
     # --- demolar ---
     def demos(self) -> dict[str, Path]:
@@ -200,6 +195,8 @@ class App:
         with self.lock:
             if self.job["durum"] == "calisiyor":
                 raise ApiError(HTTPStatus.CONFLICT, "Başka bir kayıt sürüyor.")
+            if otomatik.kilit_dolu(self.kilit):
+                raise ApiError(HTTPStatus.CONFLICT, "Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
             path = self.demo_path(did)
             csgo = Path(self.cfg["csgo_klasoru"]) if self.cfg["csgo_klasoru"] else find_csgo_dir()
             _, problems = preflight(self.cfg, csgo)
@@ -213,15 +210,18 @@ class App:
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
         cmd = [sys.executable, str(ROOT / "klip.py"), str(path), "--en-iyi", str(best)]
         try:
-            with subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
-                                  text=True, encoding="utf-8", errors="replace",
-                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as p:
+            with otomatik.kayit_kilidi(self.kilit), subprocess.Popen(
+                    cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
+                    text=True, encoding="utf-8", errors="replace",
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as p:
                 for line in p.stdout:
                     if line.strip():
                         self.job["satirlar"] = (self.job["satirlar"] + [line.rstrip()])[-LOG_LINES:]
             ok = p.returncode == 0
             self.job.update(durum="bitti" if ok else "hata",
                             mesaj="Kayıt bitti" if ok else (self.job["satirlar"] or ["Kayıt başarısız"])[-1])
+        except otomatik.Mesgul:
+            self.job.update(durum="hata", mesaj="Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
         except OSError as e:
             self.job.update(durum="hata", mesaj=str(e))
 
@@ -293,6 +293,8 @@ def make_handler(app: App):
                 return self.handle_api(app.list_demos)
             if path == "/api/en-iyi":
                 return self.handle_api(app.best)
+            if path == "/api/otomatik":
+                return self.handle_api(lambda: otomatik.ozet(app.oto_dosya, app.kilit))
             if m := re.fullmatch(r"/api/demo/([^/]+)/klipler", path):
                 return self.handle_api(lambda: app.clips(m.group(1)))
             if m := re.fullmatch(r"/api/demo/([^/]+)", path):
@@ -378,6 +380,8 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--ayarlar", type=Path, default=ROOT / "ayarlar.json")
     ap.add_argument("--tarayici-acma", action="store_true", help="tarayıcıyı otomatik açma")
+    ap.add_argument("--otomatik", action="store_true",
+                    help="yeni demoları izle ve CS2/FACEIT kapalıyken sırayla kaydet (otomatik.py izle ile aynı)")
     args = ap.parse_args()
 
     mimetypes.add_type("video/mp4", ".mp4")
@@ -386,6 +390,8 @@ def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(app))
     url = f"http://127.0.0.1:{args.port}/"
     print(f"Arayüz: {url}  (kapatmak için Ctrl+C)")
+    if args.otomatik:
+        threading.Thread(target=otomatik.calistir, args=(app.cfg, args.ayarlar), daemon=True).start()
     if not args.tarayici_acma:
         threading.Timer(0.5, webbrowser.open, args=(url,)).start()
     try:

@@ -272,6 +272,7 @@
     if (yol === '/api/kontrol') return kopya(v.kontrol);
     if (yol === '/api/demolar') return kopya(v.demolar);
     if (yol === '/api/en-iyi') return ornekEnIyi(v);
+    if (yol === '/api/otomatik') return kopya(ORNEK_OTO);
     if (yol === '/api/en-iyi/montaj') {
       if (method !== 'POST') throw hata(405, 'Geçersiz istek.');
       if (v.montajSuruyor) throw hata(409, 'Montaj zaten hazırlanıyor.');
@@ -457,6 +458,33 @@
       return S.kontrol;
     })();
     return S.kontrolSuruyor;
+  }
+
+  /* ======== otomatik kayıt kuyruğu (GET /api/otomatik; otomatik.py izle yazar) ======== */
+  const ORNEK_OTO = {
+    calisiyor: true, durum: 'Bekliyor: FACEIT açık', aktif: null, satirlar: [], bekleyen: 1,
+    kuyruk: [
+      { id: '1-7d3e0a11-x-1-1', durum: 'bekliyor', mesaj: '', kaynak: 'faceit' },
+      { id: '1-59cf10f2-x-1-1', durum: 'bitti', mesaj: '3 yeni klip', kaynak: 'izleyici' },
+    ],
+  };
+  const OTO_DURUM = { bekliyor: 'Sırada', kaydediliyor: 'Kaydediliyor', bitti: 'Bitti', hata: 'Hata' };
+  function otoCiz(o) {
+    const kutu = $('#oto');
+    if (!kutu) return;
+    if (!o) { kutu.hidden = true; return; }
+    kutu.hidden = false;
+    const liste = (o.kuyruk || []).slice(0, 5).map((i) => {
+      const kod = (i.id.split('-')[1] || i.id).slice(0, 8);
+      return `<li class="oto-${esc(i.durum)}" title="${esc(i.id + (i.mesaj ? '\n' + i.mesaj : ''))}"><span class="oto-kod">${esc(kod)}</span><span class="oto-mesaj">${esc(i.mesaj || (i.kaynak === 'faceit' ? 'FACEIT' : ''))}</span><b>${esc(OTO_DURUM[i.durum] || i.durum)}</b></li>`;
+    }).join('');
+    kutu.className = 'oto' + (o.calisiyor ? ' acik' : '');
+    kutu.innerHTML = `<div class="oto-bas"><span class="nokta"></span>Otomatik kayıt<em>${o.calisiyor ? (o.bekleyen ? o.bekleyen + ' sırada' : 'açık') : 'kapalı'}</em></div>
+      <p class="oto-not">${o.calisiyor ? esc(o.durum || '') : 'Yeni demoları kendiliğinden kaydetmek için <code>otomatik.bat</code> çalıştır.'}</p>
+      ${liste ? `<ul>${liste}</ul>` : ''}`;
+  }
+  async function otoYenile() {
+    try { otoCiz(await api('/api/otomatik')); } catch { otoCiz(null); }
   }
 
   /* ======== kenar çubuğu ======== */
@@ -1718,6 +1746,8 @@
     listeCiz();
     kontrolYenile();
     setInterval(() => { if (document.visibilityState === 'visible') kontrolYenile(); }, KONTROL_MS);
+    otoYenile();
+    setInterval(() => { if (document.visibilityState === 'visible') otoYenile(); }, 5000);
     const ok = await demolariYenile();
     if (location.hash.length > 1) { hashtenAc(); return; }
     const ilk = S.demolar.find((d) => d.analiz_edildi);
