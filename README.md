@@ -63,6 +63,7 @@ arayüz kayıttan önce kendisi başlatır.
 
 - Solda İndirilenler ve `demos/` klasöründeki demolar; sürükle-bırak ile demo yüklenebilir.
 - Demo seçince maç istatistikleri: skor, rating, ADR, K/D/A, KAST, HS%, açılış kill'leri, iki takımın skor tablosu, round çizelgesi, silahlar.
+- Derin analiz: harita üstünde kill/ölüm ısı haritası, utility (atılan bombalar, flaş asisti, kör süresi, bomba hasarı), nişan (isabet, sprey isabeti, kafa isabeti silaha göre, yaklaşık tepki süresi). Eski `.stats.json`'larda bu bölüm yoktur; sayfadaki "Yeniden hesapla" düğmesi ekler.
 - Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı).
 - İlk açılışta istatistik hesaplanır ve demonun yanına `.stats.json` olarak saklanır; sonraki açılışlar anında.
 - **Ayarlar** sayfası (`#ayarlar`): oyuncu, en düşük puan, maç başına klip, klip öncesi/sonrası süre, temiz HUD,
@@ -175,6 +176,7 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa (`ayarlar.js`: Ayarlar sayfası) |
 | `config.py` | `ayarlar.json` okur, doğrular, yazar |
 | `araclar/` | Hız ölçüm ve deneme script'leri, CSDM ayar şablonu |
+| `analiz_derin.py` | Isı haritası konumları, utility ve nişan metrikleri (`stats.json` içindeki `derin`) |
 | `tasarimlar/` | Arayüz tasarım taslakları |
 | `docs/` | Ekran görüntüleri |
 | `test_*.py` | Testler: `.venv\Scripts\python -m pytest -q` |

@@ -157,12 +157,13 @@ class App:
             })
         return sorted(rows, key=lambda r: r["tarih"], reverse=True)
 
-    def stats(self, did: str) -> dict:
+    def stats(self, did: str, refresh: bool = False) -> dict:
+        """Maç istatistikleri; refresh=True önbelleği yok sayar (eski json'a derin analiz eklemek için)."""
         import stats as st  # ağır içe aktarma; yalnız gerektiğinde
 
         with self.demo_lock(did):
             demo = open_demo(self.demo_path(did))
-            cached = st.load_stats(demo)
+            cached = None if refresh else st.load_stats(demo)
             if cached is not None:
                 return cached
             result = st.match_stats(demo, self.cfg["oyuncu"])
@@ -414,6 +415,10 @@ def make_handler(app: App):
                         raise ApiError(HTTPStatus.BAD_REQUEST, "Geçersiz JSON.")
                     return app.save_settings(data)
                 return self.handle_api(save)
+
+
+            if m := re.fullmatch(r"/api/demo/([^/]+)/yeniden-hesapla", path):
+                return self.handle_api(lambda: app.stats(m.group(1), refresh=True))
             if path == "/api/en-iyi/montaj":
                 def montage():
                     try:
