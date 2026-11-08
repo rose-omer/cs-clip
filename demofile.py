@@ -71,10 +71,11 @@ def find_csgo_dir(root: Path | None = None) -> Path | None:
 
 
 def demo_files(demo: Path) -> list[Path]:
-    """Bir demoya ait dosyalar: açılmış .dem, sıkıştırılmış hâli ve highlight JSON'u."""
+    """Bir demoya ait dosyalar: açılmış .dem, sıkıştırılmış hâli, highlight ve istatistik JSON'u."""
     demo = Path(demo)
     base = demo.with_suffix("")  # mac.dem -> mac
-    names = [demo.name, *(base.name + ".dem" + s for s in _OPENERS), base.name + ".highlights.json"]
+    names = [demo.name, *(base.name + ".dem" + s for s in _OPENERS), base.name + ".highlights.json",
+             base.name + ".stats.json"]
     return [p for n in dict.fromkeys(names) if (p := demo.parent / n).exists()]
 
 
