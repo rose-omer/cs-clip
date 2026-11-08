@@ -1,5 +1,4 @@
 demoparser2==0.42.1
-obsws-python==1.8.1
 pandas==3.1.0
 pytest==9.2.0
 zstandard==0.25.0

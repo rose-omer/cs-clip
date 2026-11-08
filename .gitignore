@@ -10,3 +10,8 @@ konsol.log
 *.dem.gz
 *.dem.bz2
 *.highlights.json
+gercek_kayit.log
+*.stats.json
+ancient_test.log
+linkedin/
+.claude/
