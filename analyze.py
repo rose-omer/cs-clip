@@ -5,7 +5,7 @@ from pathlib import Path
 
 from demoparser2 import DemoParser
 
-from highlights import TICKRATE, find_highlights
+from highlights import POST_SECONDS, PRE_SECONDS, TICKRATE, find_highlights
 
 
 def resolve_steamid(players, who: str) -> str | None:
@@ -16,7 +16,9 @@ def resolve_steamid(players, who: str) -> str | None:
     return None
 
 
-def analyze(demo: Path, player: str) -> tuple[str, str, list[dict]]:
+def analyze(
+    demo: Path, player: str, pre_seconds: float = PRE_SECONDS, post_seconds: float = POST_SECONDS
+) -> tuple[str, str, list[dict]]:
     """(harita, steamid, tüm highlight'lar) döner; skor filtresi uygulanmaz."""
     parser = DemoParser(str(demo))
     players = parser.parse_player_info()
@@ -32,7 +34,7 @@ def analyze(demo: Path, player: str) -> tuple[str, str, list[dict]]:
     if "winner" not in round_ends.columns:
         round_ends = None
 
-    highlights = find_highlights(kills, steamid, 0, match_start, round_ends)
+    highlights = find_highlights(kills, steamid, 0, match_start, round_ends, pre_seconds, post_seconds)
     return parser.parse_header().get("map_name", "?"), steamid, highlights
 
 

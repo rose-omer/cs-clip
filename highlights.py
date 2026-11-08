@@ -3,8 +3,8 @@
 import pandas as pd
 
 TICKRATE = 64  # CS2 demoları 64 tick
-PRE_SECONDS = 5
-POST_SECONDS = 3
+PRE_SECONDS = 3  # ilk kill'den önce
+POST_SECONDS = 2  # son kill'den sonra
 FAST_KILL_SECONDS = 2
 MAX_GAP_SECONDS = 8  # daha uzun boşlukta klip parçalara bölünür
 TEAM_SIZE = 5
@@ -36,7 +36,7 @@ def _clutch(round_kills: pd.DataFrame, steamid: str, my_team: int) -> tuple[int,
     return None
 
 
-def _segments(moments: list[int]) -> list[list[int]]:
+def _segments(moments: list[int], pre: float, post: float) -> list[list[int]]:
     """Anları, aralarında MAX_GAP_SECONDS'tan uzun boşluk olan parçalara böler."""
     groups = [[moments[0]]]
     for t in moments[1:]:
@@ -44,7 +44,7 @@ def _segments(moments: list[int]) -> list[list[int]]:
             groups.append([t])
         else:
             groups[-1].append(t)
-    return [[g[0] - PRE_SECONDS * TICKRATE, g[-1] + POST_SECONDS * TICKRATE] for g in groups]
+    return [[int(g[0] - pre * TICKRATE), int(g[-1] + post * TICKRATE)] for g in groups]
 
 
 def _winner(round_ends: pd.DataFrame | None, last_tick: int) -> str | None:
@@ -60,6 +60,8 @@ def find_highlights(
     min_score: float = 3,
     match_start_tick: int = 0,
     round_ends: pd.DataFrame | None = None,
+    pre_seconds: float = PRE_SECONDS,
+    post_seconds: float = POST_SECONDS,
 ) -> list[dict]:
     """player_death tablosundan oyuncunun round özetlerini skora göre sıralı döner.
 
@@ -116,7 +118,7 @@ def find_highlights(
 
         if score < min_score:
             continue
-        segments = _segments(moments)
+        segments = _segments(moments, pre_seconds, post_seconds)
         highlights.append({
             "round": int(round_played) + 1,
             "kills": n,

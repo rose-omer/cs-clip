@@ -1,6 +1,6 @@
 import pandas as pd
 
-from highlights import TICKRATE, find_highlights
+from highlights import POST_SECONDS, PRE_SECONDS, TICKRATE, find_highlights
 
 ME = "76561198000000001"
 ENEMY_TEAM = 2
@@ -54,8 +54,8 @@ def test_wallbang_and_noscope_get_labels():
 def test_clip_window_covers_kills_with_padding():
     rows = [kill(0, 1000), kill(0, 1500, victim="e2")]
     h = find_highlights(pd.DataFrame(rows), ME, min_score=0)[0]
-    assert h["start_tick"] == 1000 - 5 * TICKRATE
-    assert h["end_tick"] == 1500 + 3 * TICKRATE
+    assert h["start_tick"] == 1000 - PRE_SECONDS * TICKRATE
+    assert h["end_tick"] == 1500 + POST_SECONDS * TICKRATE
 
 
 def test_kills_before_match_start_are_ignored():
@@ -83,7 +83,7 @@ def test_won_clutch_is_labelled_with_enemy_count():
     kills, ends = clutch_round("CT")  # MY_TEAM=3 -> CT
     h = find_highlights(kills, ME, min_score=0, round_ends=ends)[0]
     assert "1v5 clutch" in h["labels"]
-    assert h["start_tick"] == 1003 - 5 * TICKRATE  # clutch anından başlar
+    assert h["start_tick"] == 1003 - PRE_SECONDS * TICKRATE  # clutch anından başlar
 
 
 def test_lost_clutch_gets_no_label():
@@ -104,7 +104,7 @@ def test_far_apart_kills_become_separate_segments():
     gap = 20 * TICKRATE
     rows = [kill(0, 1000), kill(0, 1000 + gap, victim="e2")]
     h = find_highlights(pd.DataFrame(rows), ME, min_score=0)[0]
-    pre, post = 5 * TICKRATE, 3 * TICKRATE
+    pre, post = PRE_SECONDS * TICKRATE, POST_SECONDS * TICKRATE
     assert h["segments"] == [[1000 - pre, 1000 + post], [1000 + gap - pre, 1000 + gap + post]]
 
 
@@ -117,3 +117,9 @@ def test_close_kills_share_one_segment():
 def test_min_score_filters_plain_single_kill():
     rows = [kill(0, 1000)]
     assert find_highlights(pd.DataFrame(rows), ME, min_score=3) == []
+
+
+def test_padding_can_be_changed():
+    rows = [kill(0, 1000)]
+    h = find_highlights(pd.DataFrame(rows), ME, min_score=0, pre_seconds=5, post_seconds=1)[0]
+    assert h["segments"] == [[1000 - 5 * TICKRATE, 1000 + TICKRATE]]
