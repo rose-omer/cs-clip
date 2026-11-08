@@ -17,6 +17,9 @@ DEFAULTS = {
     "ffmpeg_yolu": "",  # boşsa PATH ve winget klasörü aranır
     "pg_veri_klasoru": "",  # boşsa %LOCALAPPDATA%\csdm-pg\data
     "demo_klasorleri": [],  # arayüzün demo aradığı klasörler; boşsa İndirilenler + demos/
+    "otomatik_bekle_sn": 120,  # otomatik kayıt: CS2/FACEIT kapandıktan sonra bu kadar bekle
+    "faceit_api_anahtari": "",  # FACEIT Data API anahtarı (developers.faceit.com); otomatik.py faceit
+    "faceit_kullanici": "",  # FACEIT kullanıcı adı; boşsa "oyuncu"
 }
 
 # OBS/netcon dönemi ayarları: eski ayarlar.json bozulmasın diye yok sayılır.

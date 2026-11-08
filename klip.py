@@ -32,6 +32,15 @@ from render import (
 DEMO_SUFFIXES = (".dem", ".dem.zst", ".dem.gz", ".dem.bz2")
 
 
+def demo_id(path: Path) -> str:
+    """Uzantısız demo adı: aynı maçın .dem ve .dem.zst hâli aynı kimliği alır."""
+    name = path.name
+    for s in sorted(DEMO_SUFFIXES, key=len, reverse=True):
+        if name.lower().endswith(s):
+            return name[: -len(s)]
+    return path.stem
+
+
 def collect_demos(target: Path) -> list[Path]:
     if target.is_file():
         return [target]

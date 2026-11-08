@@ -35,6 +35,24 @@ Kurulum: **[YAPILACAKLAR.md](YAPILACAKLAR.md)**. Bilinen sorunlar ve ölçümler
 - Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı).
 - İlk açılışta istatistik hesaplanır ve demonun yanına `.stats.json` olarak saklanır; sonraki açılışlar anında.
 
+## Tam otomatik akış
+
+`otomatik.bat` (= `python otomatik.py izle`) açık kaldıkça:
+
+1. İndirilenler ve `demos/` (ya da `ayarlar.json` → `demo_klasorleri`) izlenir; indirmesi biten her **yeni** demo sıraya girer.
+   İlk çalıştırmada klasörde zaten duran demolar sıraya girmez (`--mevcutlari-da` ile girer).
+2. Sıradaki demo yalnız **CS2 ve FACEIT kapalıyken** kaydedilir: kapandıktan sonra `otomatik_bekle_sn` (120) beklenir,
+   ön kontrol (`--kontrol` ile aynı) geçmezse beklenir. CS2 ya da FACEIT açıksa hiçbir şeye dokunulmaz.
+   Aynı anda tek kayıt yapılır (arayüzle ortak `kayit.kilit`). Durum arayüzde soldaki "Otomatik kayıt" kutusunda.
+3. FACEIT'ten indirme (isteğe bağlı): `ayarlar.json`'a `"faceit_api_anahtari"` (developers.faceit.com → App Studio →
+   API Keys → Server side) ve gerekirse `"faceit_kullanici"` yaz.
+   - `python otomatik.py faceit --adet 5`: son 5 maçın demosunu hemen indirip sıraya alır.
+   - `otomatik.bat --faceit-dk 10`: 10 dakikada bir bakar, izleme başladıktan sonra biten maçları indirir.
+   - Demo dosyasına erişim FACEIT'in **Downloads API** iznini isteyebilir; izin yoksa araç bunu açıkça söyler.
+
+Diğer: `otomatik.py durum` (sırayı gösterir), `otomatik.py ekle <demo>` (elle sıraya ekler), `--temizle` (kaydı biten
+demoyu Geri Dönüşüm Kutusu'na taşır), `arayuz.bat --otomatik` (izleyiciyi arayüzle aynı pencerede çalıştırır).
+
 ## Komutlar
 
 | Komut | Ne yapar |
@@ -83,6 +101,8 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | `demofile.py` | Sıkıştırılmış demoyu açar, CS2 klasörünü bulur, Geri Dönüşüm Kutusu |
 | `render.py` | CSDM ile kayıt, parçaları round'a atama, birleştirme, montaj |
 | `kontrol.py` | Kayıt öncesi kontroller, PostgreSQL başlatma |
+| `otomatik.py`, `otomatik.bat` | Klasör izleyici + kayıt kuyruğu (`otomatik.json`) |
+| `faceit.py` | FACEIT Data API ile son maç demolarını indirme |
 | `onarim.py` | Başa sarınca CS2'yi çökerten demoların ilk tam paketini onarır |
 | `stats.py` | Maç istatistikleri (rating, ADR, KAST, round çizelgesi) |
 | `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa |
