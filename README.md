@@ -32,6 +32,7 @@ Kurulum: **[YAPILACAKLAR.md](YAPILACAKLAR.md)**. Bilinen sorunlar ve ölçümler
 
 - Solda İndirilenler ve `demos/` klasöründeki demolar; sürükle-bırak ile demo yüklenebilir.
 - Demo seçince maç istatistikleri: skor, rating, ADR, K/D/A, KAST, HS%, açılış kill'leri, iki takımın skor tablosu, round çizelgesi, silahlar.
+- Derin analiz: harita üstünde kill/ölüm ısı haritası, utility (atılan bombalar, flaş asisti, kör süresi, bomba hasarı), nişan (isabet, sprey isabeti, kafa isabeti silaha göre, yaklaşık tepki süresi). Eski `.stats.json`'larda bu bölüm yoktur; sayfadaki "Yeniden hesapla" düğmesi ekler.
 - Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı).
 - İlk açılışta istatistik hesaplanır ve demonun yanına `.stats.json` olarak saklanır; sonraki açılışlar anında.
 
@@ -85,6 +86,7 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | `kontrol.py` | Kayıt öncesi kontroller, PostgreSQL başlatma |
 | `onarim.py` | Başa sarınca CS2'yi çökerten demoların ilk tam paketini onarır |
 | `stats.py` | Maç istatistikleri (rating, ADR, KAST, round çizelgesi) |
+| `analiz_derin.py` | Isı haritası konumları, utility ve nişan metrikleri (`stats.json` içindeki `derin`) |
 | `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa |
 | `config.py` | `ayarlar.json` okur |
 | `araclar/` | Hız ölçüm ve deneme script'leri |

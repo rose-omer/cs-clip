@@ -13,6 +13,7 @@ from highlights import TICKRATE
 
 TRADE_SECONDS = 5  # katilim bu sürede takım arkadaşımca öldürülürse "trade"
 SIDE_NUM = {"T": 2, "CT": 3}
+SEMA_SURUMU = 2  # 2: "derin" bloğu (analiz_derin.py) eklendi; 1 = eski json
 EVENTS = ["player_death", "player_hurt", "round_end", "round_officially_ended", "begin_new_match"]
 
 
@@ -271,8 +272,25 @@ def match_stats(demo: Path, player: str) -> dict:
     sides = parser.parse_ticks(["team_num", "team_clan_name"], ticks=end_ticks) if end_ticks else \
         pd.DataFrame(columns=["tick", "steamid", "team_num", "team_clan_name"])
     names = {str(r.steamid): str(r.name) for r in info.itertuples()}
-    return build_stats(parser.parse_header().get("map_name", "?"), names, events["player_death"],
-                       events["player_hurt"], round_ends, official, sides, steamid, match_start)
+    map_name = parser.parse_header().get("map_name", "?")
+    stats = build_stats(map_name, names, events["player_death"], events["player_hurt"], round_ends, official,
+                        sides, steamid, match_start)
+    stats["sema"] = SEMA_SURUMU
+    stats["derin"] = deep_stats(parser, map_name, steamid, match_start, end_ticks, official)
+    return stats
+
+
+def deep_stats(parser, map_name: str, steamid: str, match_start: int, end_ticks: list[int],
+               official: list[int]) -> dict:
+    """analiz_derin bloğu; hesaplanamazsa temel istatistikler yine yazılsın diye {"hata": ...}."""
+    import analiz_derin
+
+    bounds = round_bounds(end_ticks, official)
+    last = max([*end_ticks, *[t for t in official if end_ticks and t >= end_ticks[-1]]], default=None)
+    try:
+        return analiz_derin.derin_from_parser(parser, map_name, steamid, match_start, bounds, len(end_ticks), last)
+    except Exception as e:  # demoparser2 sürümüne göre olay/özellik eksik olabilir
+        return {"surum": 0, "hata": f"Derin analiz hesaplanamadı: {e}"}
 
 
 def stats_path(demo: Path) -> Path:

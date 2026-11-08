@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -191,3 +192,22 @@ def test_best_montage_busy(server, fake_ffmpeg):
     finally:
         a.montage_lock.release()
     assert code == 409 and data["hata"] == "Montaj sürüyor."
+
+
+def test_old_stats_json_is_served_and_can_be_recomputed(server, monkeypatch):
+    import stats as st
+
+    url, (a, demos, _) = server
+    did = "1-cccc3333-x-1-1"
+    (demos / f"{did}.dem").write_bytes(b"d")
+    old = {"harita": "de_dust2", "takimlar": []}  # derin analizi olmayan eski json
+    (demos / f"{did}.stats.json").write_text(json.dumps(old), encoding="utf-8")
+    os.utime(demos / f"{did}.dem", (1_000_000, 1_000_000))  # json demodan yeni olsun
+    calls = []
+    monkeypatch.setattr(st, "match_stats", lambda demo, player: calls.append(demo) or {**old, "derin": {"surum": 1}})
+    with urllib.request.urlopen(url + f"/api/demo/{did}") as r:
+        assert "derin" not in json.loads(r.read()) and not calls
+    status, body = post_json(url + f"/api/demo/{did}/yeniden-hesapla", {})
+    assert status == 200 and body["derin"] == {"surum": 1} and len(calls) == 1
+    saved = json.loads((demos / f"{did}.stats.json").read_text(encoding="utf-8"))
+    assert saved["derin"] == {"surum": 1}

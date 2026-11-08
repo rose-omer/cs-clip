@@ -456,7 +456,429 @@
      "kill": 1,
      "hs": 0
     }
-   ]
+   ],
+   "derin": {
+    "surum": 1,
+    "harita": {
+     "ad": "de_anubis",
+     "radar": {
+      "pos_x": -2796,
+      "pos_y": 3328,
+      "scale": 5.22,
+      "px": 1024,
+      "x0": -2796,
+      "x1": 2549.2799999999997,
+      "y0": -2017.2799999999997,
+      "y1": 3328
+     },
+     "kutu": {
+      "x0": -2796,
+      "x1": 2549.3,
+      "y0": -2017.3,
+      "y1": 3328
+     },
+     "zemin": {
+      "n": 128,
+      "bitler": "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"
+     },
+     "noktalar": [
+      {
+       "tur": "kill",
+       "round": 1,
+       "x": -64.1,
+       "y": 144.2,
+       "rx": -337.9,
+       "ry": 53.3,
+       "silah": "m4a1_silencer",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 1,
+       "x": 341.2,
+       "y": 1397.7,
+       "rx": 618.3,
+       "ry": 1356.0,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 1,
+       "x": 1719.6,
+       "y": 1013.7,
+       "rx": 1118.7,
+       "ry": 856.7,
+       "silah": "mp9",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 3,
+       "x": -814.9,
+       "y": 2362.9,
+       "rx": -199.1,
+       "ry": 2158.2,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 5,
+       "x": 328.3,
+       "y": -1523.7,
+       "rx": 517.5,
+       "ry": -857.8,
+       "silah": "glock",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 6,
+       "x": 560.5,
+       "y": -1166.8,
+       "rx": 361.8,
+       "ry": -529.2,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 7,
+       "x": -644.6,
+       "y": 1953.8,
+       "rx": -1201.8,
+       "ry": 1804.9,
+       "silah": "deagle",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 8,
+       "x": -49.1,
+       "y": 2556.9,
+       "rx": -405.4,
+       "ry": 2530.2,
+       "silah": "ak47",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 8,
+       "x": 1454.7,
+       "y": -128.0,
+       "rx": 828.1,
+       "ry": 323.2,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 9,
+       "x": -367.6,
+       "y": -1661.9,
+       "rx": 296.1,
+       "ry": -1495.0,
+       "silah": "m4a1_silencer",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 9,
+       "x": -259.9,
+       "y": 2075.6,
+       "rx": -121.1,
+       "ry": 1536.3,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 10,
+       "x": -313.5,
+       "y": 2161.3,
+       "rx": -219.9,
+       "ry": 1871.0,
+       "silah": "deagle",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 11,
+       "x": -174.2,
+       "y": 1584.5,
+       "rx": 102.4,
+       "ry": 747.5,
+       "silah": "awp",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 12,
+       "x": 1169.0,
+       "y": 2128.5,
+       "rx": 1288.9,
+       "ry": 1804.9,
+       "silah": "galilar",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 14,
+       "x": 792.7,
+       "y": 231.2,
+       "rx": 1013.0,
+       "ry": -456.5,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 15,
+       "x": 1236.3,
+       "y": 1457.6,
+       "rx": 1590.3,
+       "ry": 1693.6,
+       "silah": "awp",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 15,
+       "x": 948.4,
+       "y": 1696.8,
+       "rx": 1731.9,
+       "ry": 1662.7,
+       "silah": "glock",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 18,
+       "x": -1065.7,
+       "y": -466.8,
+       "rx": -887.5,
+       "ry": -810.5,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 20,
+       "x": -552.8,
+       "y": 2372.2,
+       "rx": -903.7,
+       "ry": 2621.7,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 20,
+       "x": -1049.6,
+       "y": 368.7,
+       "rx": -1142.0,
+       "ry": 880.4,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 20,
+       "x": -261.9,
+       "y": 1558.2,
+       "rx": -225.2,
+       "ry": 1859.9,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 21,
+       "x": -1032.4,
+       "y": -356.6,
+       "rx": -1460.2,
+       "ry": -117.7,
+       "silah": "glock",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 21,
+       "x": 349.3,
+       "y": 1276.5,
+       "rx": -61.7,
+       "ry": 672.2,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 21,
+       "x": 179.0,
+       "y": 965.0,
+       "rx": 148.3,
+       "ry": 1486.4,
+       "silah": "ak47",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 22,
+       "x": 39.5,
+       "y": 121.7,
+       "rx": 311.1,
+       "ry": 233.7,
+       "silah": "m4a1_silencer",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 22,
+       "x": 1102.5,
+       "y": 594.5,
+       "rx": 376.9,
+       "ry": 175.6,
+       "silah": "awp",
+       "hs": false
+      }
+     ]
+    },
+    "utility": {
+     "atilan": {
+      "flas": 5,
+      "smoke": 4,
+      "molotof": 7,
+      "he": 5,
+      "decoy": 0
+     },
+     "atilan_toplam": 21,
+     "round_basi": 0.95,
+     "flas_asist": 0,
+     "kor_dusman": 2,
+     "kor_dusman_sn": 4.6,
+     "flas_basi_kor_sn": 0.92,
+     "flas_basi_dusman": 0.4,
+     "kor_takim": 1,
+     "kor_takim_sn": 1.8,
+     "bomba_hasar": {
+      "he": 96,
+      "molotof": 51
+     },
+     "bomba_hasar_toplam": 147
+    },
+    "nisan": {
+     "atis": 308,
+     "isabetli_atis": 33,
+     "isabet_yuzde": 10.7,
+     "ilk_mermi_atis": 92,
+     "ilk_mermi_isabet_yuzde": 25.4,
+     "sprey_atis": 123,
+     "sprey_isabet_yuzde": 13.1,
+     "vurus": 38,
+     "kafa_vurus": 12,
+     "kafa_vurus_yuzde": 31.6,
+     "silahlar": [
+      {
+       "silah": "m4a1_silencer",
+       "atis": 180,
+       "isabetli_atis": 11,
+       "isabet_yuzde": 6.1,
+       "vurus": 12,
+       "kafa": 5,
+       "kafa_yuzde": 41.7,
+       "kill": 6,
+       "hs_kill": 3,
+       "hs_kill_yuzde": 50.0
+      },
+      {
+       "silah": "glock",
+       "atis": 54,
+       "isabetli_atis": 11,
+       "isabet_yuzde": 20.4,
+       "vurus": 12,
+       "kafa": 3,
+       "kafa_yuzde": 25.0,
+       "kill": 3,
+       "hs_kill": 1,
+       "hs_kill_yuzde": 33.3
+      },
+      {
+       "silah": "ak47",
+       "atis": 42,
+       "isabetli_atis": 8,
+       "isabet_yuzde": 19.0,
+       "vurus": 9,
+       "kafa": 1,
+       "kafa_yuzde": 11.1,
+       "kill": 3,
+       "hs_kill": 1,
+       "hs_kill_yuzde": 33.3
+      },
+      {
+       "silah": "mp9",
+       "atis": 18,
+       "isabetli_atis": 2,
+       "isabet_yuzde": 11.1,
+       "vurus": 3,
+       "kafa": 2,
+       "kafa_yuzde": 66.7,
+       "kill": 1,
+       "hs_kill": 0,
+       "hs_kill_yuzde": 0.0
+      },
+      {
+       "silah": "awp",
+       "atis": 14,
+       "isabetli_atis": 1,
+       "isabet_yuzde": 7.1,
+       "vurus": 2,
+       "kafa": 1,
+       "kafa_yuzde": 50.0,
+       "kill": 1,
+       "hs_kill": 1,
+       "hs_kill_yuzde": 100.0
+      }
+     ],
+     "ttd": {
+      "ornek": 16,
+      "medyan_ms": 523,
+      "ortalama_ms": 488,
+      "dagilim": [
+       {
+        "alt": 0,
+        "ust": 250,
+        "sayi": 4
+       },
+       {
+        "alt": 250,
+        "ust": 500,
+        "sayi": 4
+       },
+       {
+        "alt": 500,
+        "ust": 750,
+        "sayi": 6
+       },
+       {
+        "alt": 750,
+        "ust": 1000,
+        "sayi": 0
+       },
+       {
+        "alt": 1000,
+        "ust": null,
+        "sayi": 2
+       }
+      ]
+     }
+    },
+    "notlar": [
+     "Örnek veri: değerler uydurmadır.",
+     "Time-to-damage, sunucunun radar görüşüne (approximate_spotted_by) dayanır; yaklaşık bir değerdir."
+    ]
+   },
+   "sema": 2
   },
   "1-0b7e33a9-51d2-4f08-9c6e-a4d18e7f0233-1-1": {
    "harita": "de_mirage",
@@ -886,7 +1308,517 @@
      "kill": 1,
      "hs": 1
     }
-   ]
+   ],
+   "derin": {
+    "surum": 1,
+    "harita": {
+     "ad": "de_mirage",
+     "radar": {
+      "pos_x": -3230,
+      "pos_y": 1713,
+      "scale": 5.0,
+      "px": 1024,
+      "x0": -3230,
+      "x1": 1890.0,
+      "y0": -3407.0,
+      "y1": 1713
+     },
+     "kutu": {
+      "x0": -3230,
+      "x1": 1890.0,
+      "y0": -3407.0,
+      "y1": 1713
+     },
+     "zemin": null,
+     "noktalar": [
+      {
+       "tur": "olum",
+       "round": 1,
+       "x": -248.4,
+       "y": -745.1,
+       "rx": -100.6,
+       "ry": -226.1,
+       "silah": "deagle",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 2,
+       "x": -1022.7,
+       "y": -1450.0,
+       "rx": -1274.0,
+       "ry": -1914.9,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 2,
+       "x": -1611.5,
+       "y": -1493.3,
+       "rx": -1068.8,
+       "ry": -968.4,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 2,
+       "x": 770.2,
+       "y": -376.9,
+       "rx": 493.8,
+       "ry": -68.0,
+       "silah": "deagle",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 2,
+       "x": -1171.3,
+       "y": -2425.9,
+       "rx": -1172.1,
+       "ry": -2165.9,
+       "silah": "deagle",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 4,
+       "x": -1858.6,
+       "y": -952.7,
+       "rx": -1865.2,
+       "ry": -1263.8,
+       "silah": "m4a1_silencer",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 4,
+       "x": 896.5,
+       "y": -800.4,
+       "rx": 911.2,
+       "ry": -260.0,
+       "silah": "deagle",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 5,
+       "x": 591.3,
+       "y": -1952.0,
+       "rx": 396.1,
+       "ry": -2295.8,
+       "silah": "awp",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 5,
+       "x": 6.1,
+       "y": 772.0,
+       "rx": -424.9,
+       "ry": 1069.7,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 6,
+       "x": -892.2,
+       "y": -863.4,
+       "rx": -636.0,
+       "ry": -1299.2,
+       "silah": "galilar",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 7,
+       "x": -1603.3,
+       "y": -1733.2,
+       "rx": -1342.1,
+       "ry": -952.4,
+       "silah": "deagle",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 8,
+       "x": -1139.8,
+       "y": -2183.3,
+       "rx": -1452.5,
+       "ry": -1832.8,
+       "silah": "ak47",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 8,
+       "x": -805.4,
+       "y": -181.3,
+       "rx": -1243.6,
+       "ry": 208.3,
+       "silah": "m4a1_silencer",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 8,
+       "x": -982.3,
+       "y": -1346.5,
+       "rx": -667.2,
+       "ry": -1234.5,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 9,
+       "x": 574.7,
+       "y": -1073.9,
+       "rx": 1216.2,
+       "ry": -841.2,
+       "silah": "awp",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 10,
+       "x": -1340.3,
+       "y": 662.9,
+       "rx": -697.3,
+       "ry": 1214.4,
+       "silah": "awp",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 10,
+       "x": -111.2,
+       "y": -1561.6,
+       "rx": -89.6,
+       "ry": -1121.6,
+       "silah": "awp",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 12,
+       "x": -1426.8,
+       "y": -2473.5,
+       "rx": -1731.6,
+       "ry": -2124.0,
+       "silah": "galilar",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 13,
+       "x": -1559.5,
+       "y": 386.4,
+       "rx": -1190.9,
+       "ry": 601.4,
+       "silah": "m4a1_silencer",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 14,
+       "x": 660.0,
+       "y": -1890.5,
+       "rx": 688.3,
+       "ry": -2672.8,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 14,
+       "x": -2195.5,
+       "y": 406.0,
+       "rx": -2121.5,
+       "ry": 767.4,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 16,
+       "x": -753.1,
+       "y": -837.9,
+       "rx": -577.8,
+       "ry": -287.1,
+       "silah": "ak47",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 17,
+       "x": 368.9,
+       "y": -2014.0,
+       "rx": -63.8,
+       "ry": -2276.5,
+       "silah": "m4a1_silencer",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 18,
+       "x": 475.5,
+       "y": -270.4,
+       "rx": 960.1,
+       "ry": -441.5,
+       "silah": "awp",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 18,
+       "x": -550.1,
+       "y": -798.6,
+       "rx": -1012.4,
+       "ry": -782.9,
+       "silah": "ak47",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 18,
+       "x": -1545.5,
+       "y": -566.6,
+       "rx": -2271.0,
+       "ry": -701.1,
+       "silah": "deagle",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 19,
+       "x": -1394.0,
+       "y": 134.7,
+       "rx": -1055.6,
+       "ry": 894.7,
+       "silah": "deagle",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 19,
+       "x": -1427.2,
+       "y": -2430.2,
+       "rx": -1071.1,
+       "ry": -2208.7,
+       "silah": "usp_silencer",
+       "hs": true
+      },
+      {
+       "tur": "kill",
+       "round": 19,
+       "x": -315.5,
+       "y": -1756.6,
+       "rx": -345.3,
+       "ry": -1428.9,
+       "silah": "ak47",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 19,
+       "x": -2270.6,
+       "y": 772.7,
+       "rx": -3005.2,
+       "ry": 1190.3,
+       "silah": "awp",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 19,
+       "x": 260.7,
+       "y": -530.6,
+       "rx": 325.2,
+       "ry": -1246.1,
+       "silah": "awp",
+       "hs": true
+      },
+      {
+       "tur": "olum",
+       "round": 20,
+       "x": 64.5,
+       "y": -377.7,
+       "rx": 827.6,
+       "ry": -162.3,
+       "silah": "galilar",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 21,
+       "x": -271.2,
+       "y": -2343.8,
+       "rx": -487.6,
+       "ry": -3175.9,
+       "silah": "m4a1_silencer",
+       "hs": false
+      },
+      {
+       "tur": "kill",
+       "round": 21,
+       "x": 867.5,
+       "y": -1627.2,
+       "rx": 1226.4,
+       "ry": -850.1,
+       "silah": "deagle",
+       "hs": false
+      },
+      {
+       "tur": "olum",
+       "round": 23,
+       "x": 96.3,
+       "y": 176.1,
+       "rx": 474.6,
+       "ry": 629.4,
+       "silah": "galilar",
+       "hs": false
+      }
+     ]
+    },
+    "utility": {
+     "atilan": {
+      "flas": 7,
+      "smoke": 7,
+      "molotof": 5,
+      "he": 2,
+      "decoy": 1
+     },
+     "atilan_toplam": 22,
+     "round_basi": 0.96,
+     "flas_asist": 1,
+     "kor_dusman": 3,
+     "kor_dusman_sn": 5.0,
+     "flas_basi_kor_sn": 0.71,
+     "flas_basi_dusman": 0.43,
+     "kor_takim": 1,
+     "kor_takim_sn": 1.8,
+     "bomba_hasar": {
+      "he": 69,
+      "molotof": 68
+     },
+     "bomba_hasar_toplam": 137
+    },
+    "nisan": {
+     "atis": 345,
+     "isabetli_atis": 49,
+     "isabet_yuzde": 14.2,
+     "ilk_mermi_atis": 103,
+     "ilk_mermi_isabet_yuzde": 23.9,
+     "sprey_atis": 138,
+     "sprey_isabet_yuzde": 11.8,
+     "vurus": 54,
+     "kafa_vurus": 14,
+     "kafa_vurus_yuzde": 25.9,
+     "silahlar": [
+      {
+       "silah": "m4a1_silencer",
+       "atis": 98,
+       "isabetli_atis": 27,
+       "isabet_yuzde": 27.6,
+       "vurus": 28,
+       "kafa": 5,
+       "kafa_yuzde": 17.9,
+       "kill": 7,
+       "hs_kill": 3,
+       "hs_kill_yuzde": 42.9
+      },
+      {
+       "silah": "awp",
+       "atis": 84,
+       "isabetli_atis": 7,
+       "isabet_yuzde": 8.3,
+       "vurus": 8,
+       "kafa": 2,
+       "kafa_yuzde": 25.0,
+       "kill": 4,
+       "hs_kill": 2,
+       "hs_kill_yuzde": 50.0
+      },
+      {
+       "silah": "ak47",
+       "atis": 60,
+       "isabetli_atis": 7,
+       "isabet_yuzde": 11.7,
+       "vurus": 8,
+       "kafa": 4,
+       "kafa_yuzde": 50.0,
+       "kill": 4,
+       "hs_kill": 2,
+       "hs_kill_yuzde": 50.0
+      },
+      {
+       "silah": "deagle",
+       "atis": 75,
+       "isabetli_atis": 5,
+       "isabet_yuzde": 6.7,
+       "vurus": 6,
+       "kafa": 2,
+       "kafa_yuzde": 33.3,
+       "kill": 3,
+       "hs_kill": 1,
+       "hs_kill_yuzde": 33.3
+      },
+      {
+       "silah": "usp_silencer",
+       "atis": 28,
+       "isabetli_atis": 3,
+       "isabet_yuzde": 10.7,
+       "vurus": 4,
+       "kafa": 1,
+       "kafa_yuzde": 25.0,
+       "kill": 1,
+       "hs_kill": 1,
+       "hs_kill_yuzde": 100.0
+      }
+     ],
+     "ttd": {
+      "ornek": 16,
+      "medyan_ms": 523,
+      "ortalama_ms": 504,
+      "dagilim": [
+       {
+        "alt": 0,
+        "ust": 250,
+        "sayi": 4
+       },
+       {
+        "alt": 250,
+        "ust": 500,
+        "sayi": 4
+       },
+       {
+        "alt": 500,
+        "ust": 750,
+        "sayi": 6
+       },
+       {
+        "alt": 750,
+        "ust": 1000,
+        "sayi": 1
+       },
+       {
+        "alt": 1000,
+        "ust": null,
+        "sayi": 1
+       }
+      ]
+     }
+    },
+    "notlar": [
+     "Örnek veri: değerler uydurmadır.",
+     "Time-to-damage, sunucunun radar görüşüne (approximate_spotted_by) dayanır; yaklaşık bir değerdir.",
+     "Örnek modda de_mirage zemini yok; noktalar boş ızgarada gösterilir."
+    ]
+   },
+   "sema": 2
   },
   "1-c41a9e07-7b3f-45d1-8e22-91f0b5d6ac48-1-1": {
    "harita": "de_inferno",
@@ -1675,5 +2607,446 @@
    "saniye": 10
   }
  ],
- "en_iyi_montaj": null
+ "en_iyi_montaj": null,
+ "yeniden_hesapla": {
+  "1-c41a9e07-7b3f-45d1-8e22-91f0b5d6ac48-1-1": {
+   "surum": 1,
+   "harita": {
+    "ad": "de_inferno",
+    "radar": {
+     "pos_x": -2087,
+     "pos_y": 3870,
+     "scale": 4.9,
+     "px": 1024,
+     "x0": -2087,
+     "x1": 2930.6000000000004,
+     "y0": -1147.6000000000004,
+     "y1": 3870
+    },
+    "kutu": {
+     "x0": -2087,
+     "x1": 2930.6,
+     "y0": -1147.6,
+     "y1": 3870
+    },
+    "zemin": null,
+    "noktalar": [
+     {
+      "tur": "kill",
+      "round": 1,
+      "x": -989.0,
+      "y": 618.7,
+      "rx": -1318.6,
+      "ry": 1.2,
+      "silah": "ak47",
+      "hs": false
+     },
+     {
+      "tur": "kill",
+      "round": 2,
+      "x": 986.0,
+      "y": 689.6,
+      "rx": 437.0,
+      "ry": 632.4,
+      "silah": "famas",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 2,
+      "x": 313.7,
+      "y": 136.1,
+      "rx": 611.6,
+      "ry": -99.1,
+      "silah": "deagle",
+      "hs": false
+     },
+     {
+      "tur": "olum",
+      "round": 3,
+      "x": 15.1,
+      "y": 2826.1,
+      "rx": 596.0,
+      "ry": 2308.9,
+      "silah": "deagle",
+      "hs": false
+     },
+     {
+      "tur": "kill",
+      "round": 6,
+      "x": 1957.2,
+      "y": 2762.1,
+      "rx": 2502.2,
+      "ry": 2822.3,
+      "silah": "m4a1_silencer",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 7,
+      "x": 1449.1,
+      "y": 2864.4,
+      "rx": 1045.7,
+      "ry": 2997.1,
+      "silah": "ak47",
+      "hs": false
+     },
+     {
+      "tur": "kill",
+      "round": 7,
+      "x": -510.0,
+      "y": 2792.1,
+      "rx": -356.5,
+      "ry": 3401.0,
+      "silah": "ak47",
+      "hs": false
+     },
+     {
+      "tur": "olum",
+      "round": 8,
+      "x": 1628.4,
+      "y": 1535.1,
+      "rx": 1715.6,
+      "ry": 1824.6,
+      "silah": "deagle",
+      "hs": false
+     },
+     {
+      "tur": "olum",
+      "round": 10,
+      "x": 790.8,
+      "y": 200.6,
+      "rx": 1176.6,
+      "ry": -213.1,
+      "silah": "galilar",
+      "hs": true
+     },
+     {
+      "tur": "olum",
+      "round": 11,
+      "x": 332.5,
+      "y": 859.2,
+      "rx": 116.6,
+      "ry": 1556.9,
+      "silah": "deagle",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 12,
+      "x": -728.7,
+      "y": 1438.5,
+      "rx": -407.2,
+      "ry": 1340.1,
+      "silah": "m4a1_silencer",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 12,
+      "x": 1450.1,
+      "y": 1389.3,
+      "rx": 1985.9,
+      "ry": 927.8,
+      "silah": "ak47",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 12,
+      "x": -440.8,
+      "y": 2638.3,
+      "rx": -705.9,
+      "ry": 2661.5,
+      "silah": "ak47",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 12,
+      "x": -1172.3,
+      "y": 1334.5,
+      "rx": -1597.4,
+      "ry": 1470.4,
+      "silah": "ak47",
+      "hs": false
+     },
+     {
+      "tur": "olum",
+      "round": 12,
+      "x": 922.7,
+      "y": 721.6,
+      "rx": 448.9,
+      "ry": 543.2,
+      "silah": "ak47",
+      "hs": false
+     },
+     {
+      "tur": "olum",
+      "round": 13,
+      "x": -942.4,
+      "y": 1363.1,
+      "rx": -712.3,
+      "ry": 800.6,
+      "silah": "awp",
+      "hs": false
+     },
+     {
+      "tur": "kill",
+      "round": 14,
+      "x": -732.0,
+      "y": 860.1,
+      "rx": -1053.1,
+      "ry": 1588.6,
+      "silah": "deagle",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 14,
+      "x": -1178.2,
+      "y": 2166.4,
+      "rx": -1004.1,
+      "ry": 1888.4,
+      "silah": "m4a1_silencer",
+      "hs": false
+     },
+     {
+      "tur": "olum",
+      "round": 15,
+      "x": 2016.1,
+      "y": 1200.5,
+      "rx": 2255.9,
+      "ry": 1488.9,
+      "silah": "ak47",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 16,
+      "x": 1791.1,
+      "y": 2045.3,
+      "rx": 2148.2,
+      "ry": 1791.0,
+      "silah": "glock",
+      "hs": true
+     },
+     {
+      "tur": "olum",
+      "round": 16,
+      "x": 601.2,
+      "y": 780.9,
+      "rx": 76.1,
+      "ry": 1352.3,
+      "silah": "ak47",
+      "hs": false
+     },
+     {
+      "tur": "kill",
+      "round": 17,
+      "x": 11.5,
+      "y": 1017.3,
+      "rx": 644.4,
+      "ry": 1012.4,
+      "silah": "ak47",
+      "hs": true
+     },
+     {
+      "tur": "olum",
+      "round": 17,
+      "x": 1223.5,
+      "y": 1081.1,
+      "rx": 717.2,
+      "ry": 1385.4,
+      "silah": "awp",
+      "hs": true
+     },
+     {
+      "tur": "kill",
+      "round": 19,
+      "x": -25.5,
+      "y": 1130.2,
+      "rx": -69.8,
+      "ry": 1408.0,
+      "silah": "deagle",
+      "hs": false
+     },
+     {
+      "tur": "kill",
+      "round": 19,
+      "x": -857.2,
+      "y": 2435.9,
+      "rx": -1047.6,
+      "ry": 3272.7,
+      "silah": "m4a1_silencer",
+      "hs": false
+     },
+     {
+      "tur": "olum",
+      "round": 19,
+      "x": 1231.4,
+      "y": 1355.2,
+      "rx": 799.1,
+      "ry": 1137.5,
+      "silah": "deagle",
+      "hs": false
+     },
+     {
+      "tur": "kill",
+      "round": 20,
+      "x": -383.2,
+      "y": 608.9,
+      "rx": -755.7,
+      "ry": 583.2,
+      "silah": "famas",
+      "hs": false
+     },
+     {
+      "tur": "olum",
+      "round": 20,
+      "x": 838.1,
+      "y": 2526.4,
+      "rx": 928.5,
+      "ry": 2942.9,
+      "silah": "ak47",
+      "hs": true
+     }
+    ]
+   },
+   "utility": {
+    "atilan": {
+     "flas": 3,
+     "smoke": 4,
+     "molotof": 4,
+     "he": 3,
+     "decoy": 0
+    },
+    "atilan_toplam": 14,
+    "round_basi": 0.7,
+    "flas_asist": 2,
+    "kor_dusman": 2,
+    "kor_dusman_sn": 4.3,
+    "flas_basi_kor_sn": 1.43,
+    "flas_basi_dusman": 0.67,
+    "kor_takim": 1,
+    "kor_takim_sn": 1.8,
+    "bomba_hasar": {
+     "he": 56,
+     "molotof": 42
+    },
+    "bomba_hasar_toplam": 98
+   },
+   "nisan": {
+    "atis": 417,
+    "isabetli_atis": 44,
+    "isabet_yuzde": 10.6,
+    "ilk_mermi_atis": 125,
+    "ilk_mermi_isabet_yuzde": 24.3,
+    "sprey_atis": 166,
+    "sprey_isabet_yuzde": 12.4,
+    "vurus": 49,
+    "kafa_vurus": 11,
+    "kafa_vurus_yuzde": 22.4,
+    "silahlar": [
+     {
+      "silah": "ak47",
+      "atis": 196,
+      "isabetli_atis": 20,
+      "isabet_yuzde": 10.2,
+      "vurus": 21,
+      "kafa": 4,
+      "kafa_yuzde": 19.0,
+      "kill": 7,
+      "hs_kill": 3,
+      "hs_kill_yuzde": 42.9
+     },
+     {
+      "silah": "deagle",
+      "atis": 81,
+      "isabetli_atis": 11,
+      "isabet_yuzde": 13.6,
+      "vurus": 12,
+      "kafa": 2,
+      "kafa_yuzde": 16.7,
+      "kill": 3,
+      "hs_kill": 1,
+      "hs_kill_yuzde": 33.3
+     },
+     {
+      "silah": "m4a1_silencer",
+      "atis": 56,
+      "isabetli_atis": 7,
+      "isabet_yuzde": 12.5,
+      "vurus": 8,
+      "kafa": 2,
+      "kafa_yuzde": 25.0,
+      "kill": 4,
+      "hs_kill": 2,
+      "hs_kill_yuzde": 50.0
+     },
+     {
+      "silah": "famas",
+      "atis": 58,
+      "isabetli_atis": 3,
+      "isabet_yuzde": 5.2,
+      "vurus": 4,
+      "kafa": 1,
+      "kafa_yuzde": 25.0,
+      "kill": 2,
+      "hs_kill": 1,
+      "hs_kill_yuzde": 50.0
+     },
+     {
+      "silah": "glock",
+      "atis": 26,
+      "isabetli_atis": 3,
+      "isabet_yuzde": 11.5,
+      "vurus": 4,
+      "kafa": 2,
+      "kafa_yuzde": 50.0,
+      "kill": 1,
+      "hs_kill": 1,
+      "hs_kill_yuzde": 100.0
+     }
+    ],
+    "ttd": {
+     "ornek": 14,
+     "medyan_ms": 523,
+     "ortalama_ms": 559,
+     "dagilim": [
+      {
+       "alt": 0,
+       "ust": 250,
+       "sayi": 4
+      },
+      {
+       "alt": 250,
+       "ust": 500,
+       "sayi": 3
+      },
+      {
+       "alt": 500,
+       "ust": 750,
+       "sayi": 3
+      },
+      {
+       "alt": 750,
+       "ust": 1000,
+       "sayi": 2
+      },
+      {
+       "alt": 1000,
+       "ust": null,
+       "sayi": 2
+      }
+     ]
+    }
+   },
+   "notlar": [
+    "Örnek veri: değerler uydurmadır.",
+    "Time-to-damage, sunucunun radar görüşüne (approximate_spotted_by) dayanır; yaklaşık bir değerdir.",
+    "Örnek modda de_inferno zemini yok; noktalar boş ızgarada gösterilir."
+   ]
+  }
+ }
 }
