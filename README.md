@@ -1,10 +1,30 @@
 # cs-klip
 
-CS2 demosundan senin iyi anlarını bulur ve `.mp4` klip yapar.
+CS2 maç demolarından senin en iyi anlarını bulan, puanlayan ve CS2'nin içinde otomatik `.mp4` klip olarak kaydeden
+bir araç. Yanında Leetify benzeri yerel bir maç analizi arayüzü var: rating, ADR, KAST, skor tablosu, round geçmişi,
+silah dağılımı ve kliplerin kendisi.
 
-Akış: demo (`.dem` / `.dem.zst` / `.gz` / `.bz2`) → analiz → CS Demo Manager demoyu CS2'de **bir kez** açıp anları kaydeder → parçalar birleştirilip `klipler/` klasörüne adlandırılır.
+![Maç özeti](docs/1-mac-ozeti.png)
 
+| Skor tablosu | Round ve silah analizi | Highlight klipleri |
+|---|---|---|
+| ![Skor tablosu](docs/2-skor-tablosu.png) | ![Roundlar ve silahlar](docs/3-roundlar-silahlar.png) | ![Klipler](docs/4-klipler.png) |
+
+## Nasıl çalışır
+
+1. **Demoyu oku**: `.dem`, `.dem.zst`, `.gz`, `.bz2` açılır, [demoparser2](https://github.com/LaihoE/demoparser) ile
+   kill'ler, round'lar ve oyuncu durumları çıkarılır.
+2. **Puanla**: multi-kill, clutch, headshot, wallbang, noscope, smoke arkası gibi olaylar puanlanır, en iyi anlar seçilir.
+3. **Kaydet**: [CS Demo Manager](https://cs-demo-manager.com/) demoyu CS2'de **bir kez** açıp anları kaydeder;
+   parçalar FFmpeg ile birleştirilip `klipler/` klasörüne adlandırılır, sonunda montaj yapılır.
+4. **Göster**: yerel arayüz maç istatistiklerini hesaplar ve klipleri sayfada oynatır.
+
+Ayrıca: kayıt öncesi kontroller (FACEIT/CS2 açık mı, veritabanı, disk), takılan CS2 için süre sınırı, CS2'yi
+çökerten bozuk demoları onaran bir yeniden yazıcı (`onarim.py`, ayrıntı [NOTLAR.md](NOTLAR.md)) ve 78 test.
+
+Gereken: Windows, Python 3.12, CS2, CS Demo Manager (PostgreSQL ile), FFmpeg.
 Kurulum: **[YAPILACAKLAR.md](YAPILACAKLAR.md)**. Bilinen sorunlar ve ölçümler: [NOTLAR.md](NOTLAR.md).
+`tasarimlar/` klasöründe arayüz için 10 farklı tasarım taslağı var (tek dosyalık HTML).
 
 ## Arayüz
 
@@ -63,8 +83,11 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | `demofile.py` | Sıkıştırılmış demoyu açar, CS2 klasörünü bulur, Geri Dönüşüm Kutusu |
 | `render.py` | CSDM ile kayıt, parçaları round'a atama, birleştirme, montaj |
 | `kontrol.py` | Kayıt öncesi kontroller, PostgreSQL başlatma |
+| `onarim.py` | Başa sarınca CS2'yi çökerten demoların ilk tam paketini onarır |
 | `stats.py` | Maç istatistikleri (rating, ADR, KAST, round çizelgesi) |
 | `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa |
 | `config.py` | `ayarlar.json` okur |
-| `araclar/` | Hız ölçüm script'leri |
+| `araclar/` | Hız ölçüm ve deneme script'leri |
+| `tasarimlar/` | Arayüz tasarım taslakları |
+| `docs/` | Ekran görüntüleri |
 | `test_*.py` | Testler: `.venv\Scripts\python -m pytest -q` |
