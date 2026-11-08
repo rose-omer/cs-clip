@@ -10,6 +10,8 @@ DEFAULTS = {
     "once_sn": 3,  # ilk kill'den önce kaydedilecek süre
     "sonra_sn": 2,  # son kill'den sonra kaydedilecek süre
     "temiz_hud": True,  # yalnız kill akışı görünür
+    "kayit_cozunurluk": "",  # "1080p" | "1440p"; boşsa CSDM'in ayarı
+    "kayit_crf": 0,  # 14-35 (düşük = daha iyi, büyük dosya); 0 = CSDM'in ayarı
     "montaj": True,  # klipleri tek videoda birleştir
     "cikti_klasoru": "klipler",
     "csgo_klasoru": "",  # boşsa Steam'den bulunur

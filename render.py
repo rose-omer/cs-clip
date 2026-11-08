@@ -62,8 +62,28 @@ def analyze_args(csdm: Path, demo: Path) -> list[str]:
     return [str(csdm), "analyze", str(demo)]
 
 
+RECORD_SIZES = {"1080p": (1920, 1080), "1440p": (2560, 1440)}
+CRF_RANGE = (14, 35)
+
+
+def quality_args(resolution: str = "", crf: int = 0) -> list[str]:
+    """Kayıt çözünürlüğü / CRF için csdm seçenekleri; boş / 0 = CSDM'in kendi ayarı."""
+    out = []
+    if resolution:
+        if resolution not in RECORD_SIZES:
+            raise SystemExit(f"kayit_cozunurluk {' / '.join(RECORD_SIZES)} ya da boş olmalı: {resolution!r}")
+        w, h = RECORD_SIZES[resolution]
+        out += ["--width", str(w), "--height", str(h)]
+    if crf:
+        if isinstance(crf, bool) or not isinstance(crf, int) or not CRF_RANGE[0] <= crf <= CRF_RANGE[1]:
+            raise SystemExit(f"kayit_crf {CRF_RANGE[0]}-{CRF_RANGE[1]} arasında ya da 0 olmalı: {crf!r}")
+        out += ["--ffmpeg-crf", str(crf)]
+    return out
+
+
 def video_args(
-    csdm: Path, demo: Path, steamid: str, rounds: list[int], pre: float, post: float, clean_hud: bool
+    csdm: Path, demo: Path, steamid: str, rounds: list[int], pre: float, post: float, clean_hud: bool,
+    quality: list[str] | tuple = (),
 ) -> list[str]:
     """Tüm round'ları tek CS2 açılışında kaydeden csdm komutu."""
     return [
@@ -74,10 +94,12 @@ def video_args(
         "--no-concatenate-sequences", "--recording-system", "CS", "--close-game-after-recording",
         "--show-only-death-notices" if clean_hud else "--no-show-only-death-notices",
         "--no-player-voices",  # sesli sohbet kliplere girmesin
+        *quality,
     ]
 
 
-def segment_args(csdm: Path, demo: Path, steamid: str, start: int, end: int, clean_hud: bool) -> list[str]:
+def segment_args(csdm: Path, demo: Path, steamid: str, start: int, end: int, clean_hud: bool,
+                 quality: list[str] | tuple = ()) -> list[str]:
     """Tek tick aralığını kendi CS2 açılışında kaydeden csdm komutu (tek atlama)."""
     return [
         str(csdm), "video", str(demo), str(start), str(end),
@@ -85,6 +107,7 @@ def segment_args(csdm: Path, demo: Path, steamid: str, start: int, end: int, cle
         "--no-concatenate-sequences", "--recording-system", "CS", "--close-game-after-recording",
         "--show-only-death-notices" if clean_hud else "--no-show-only-death-notices",
         "--no-player-voices",  # sesli sohbet kliplere girmesin
+        *quality,
     ]
 
 
@@ -186,6 +209,7 @@ def record_demo(
     env: dict | None = None,
     per_segment: bool = False,
     fallback: bool = True,
+    quality: list[str] | tuple = (),
 ) -> list[Path]:
     """Demonun kliplerini tek CS2 açılışında kaydeder; hazır klipleri atlar.
 
@@ -193,6 +217,7 @@ def record_demo(
     atlamada (bir klipten sonrakine geçerken) çöküyor ya da takılıyor; tek atlamada sorunsuz.
     Parçası kaydedilemeyen klip atlanır, diğerleri korunur.
     fallback: tek açılış çöker/takılırsa parça parça yeniden dener.
+    quality: quality_args() çıktısı (çözünürlük / CRF).
     """
     out_dir = Path(out_dir)
     targets = {i: out_dir / clip_filename(prefix, h) for i, h in enumerate(clips)}
@@ -214,7 +239,7 @@ def record_demo(
 
     started = time.time() - 1
     if not per_segment:
-        err = run(video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud),
+        err = run(video_args(csdm, demo, steamid, [clips[i]["round"] for i in todo], pre, post, clean_hud, quality),
                   record_timeout([clips[i] for i in todo]))
         if err:
             if not fallback or NOT_IN_DB in err:
@@ -233,7 +258,7 @@ def record_demo(
                 if i in failed:
                     continue
                 print(f"  parça {k}/{total} (tick {a}-{b})")
-                err = run(segment_args(csdm, demo, steamid, a, b, clean_hud),
+                err = run(segment_args(csdm, demo, steamid, a, b, clean_hud, quality),
                           START_ALLOWANCE + SECONDS_PER_CLIP_SECOND * (b - a) / TICKRATE)
                 if err:
                     if NOT_IN_DB in err:
