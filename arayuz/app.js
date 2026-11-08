@@ -83,6 +83,8 @@
     eiAdet: 10,          // vitrinde kaç klip (0 = hepsi)
     eiGorunen: [],       // vitrinde çizilen klipler (oynatıcı sırası)
     mjAdet: 10,
+    // Montaj türü: 'sade' (yeniden kodlamadan birleştir) | 'paylasim' (TikTok/Reels/LinkedIn'e hazır video)
+    mjSec: { tur: 'sade', dikey: true, yerlesim: 'bulanik', kart: true, etiket: true, kalite: '1080p', sikistirma: 'dengeli', hedefMb: '', muzik: '' },
     montajSuruyor: false,
     montajBas: 0,
     montajHata: null,
@@ -277,12 +279,13 @@
       if (v.montajSuruyor) throw hata(409, 'Montaj zaten hazırlanıyor.');
       const l = ornekEnIyi(v).klipler;
       if (!l.length) throw hata(409, 'Montaj için klip yok.');
-      const adet = Math.min(Math.max(Number(JSON.parse(body || '{}').adet) || 10, 1), l.length);
+      const govde = JSON.parse(body || '{}');
+      const adet = Math.min(Math.max(Number(govde.adet) || 10, 1), l.length);
       v.montajSuruyor = true;
       try { await bekle(2600); } finally { v.montajSuruyor = false; }
       const secilen = l.slice(0, adet);
       v.en_iyi_montaj = {
-        klip: '/klip/en_iyi_montaj.mp4', adet,
+        klip: govde.paylasim ? `/klip/paylasim/en_iyi_${govde.dikey ? 'dikey' : 'yatay'}.mp4` : '/klip/en_iyi_montaj.mp4', adet,
         boyut_mb: Math.round(secilen.reduce((a, k) => a + (k.boyut_mb || 0), 0) * 9.2) / 10,
         tarih: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19), // yerel saat
         saniye: secilen.reduce((a, k) => a + (k.saniye || 15), 0),
@@ -1275,7 +1278,9 @@
     const klipler = (Array.isArray(v && v.klipler) ? v.klipler : [])
       .filter((k) => k && k.klip)
       .sort((a, b) => (b.skor || 0) - (a.skor || 0));
-    const montaj = v && v.montaj && v.montaj.klip ? v.montaj : null;
+    // Sade montaj ve paylaşım videolarından en yenisi kartta görünür.
+    const adaylar = [v && v.montaj, ...(Array.isArray(v && v.paylasim) ? v.paylasim : [])].filter((m) => m && m.klip);
+    const montaj = adaylar.sort((a, b) => String(b.tarih || '').localeCompare(String(a.tarih || '')))[0] || null;
     return { klipler, montaj };
   }
   // 404: sunucu bu ucu tanımıyor (yeni özellikten önce başlatılmış).
@@ -1463,17 +1468,48 @@
         <div class="kayit-satir"><span class="kayit-et">Klip sayısı</span>
           <div class="secim" role="radiogroup" aria-label="Montajda kaç klip olsun">${[5, 10, 15, 20].map((x) =>
             `<button type="button" role="radio" data-mj-adet="${x}" class="${S.mjAdet === x ? 'aktif' : ''}" aria-checked="${S.mjAdet === x}"${sur ? ' disabled' : ''}>${x}</button>`).join('')}</div></div>
+        ${mjSecenekHtml(sur)}
         <button class="btn-kaydet btn-montaj${sur ? ' calisiyor' : ''}" id="montajYap" type="button"${sur || !n ? ' disabled' : ''}${!n ? ' title="Önce klip kaydet."' : ''}>
           ${sur ? '<span class="rec"></span>' : ikon('i-film')}<span>${sur ? 'Montaj hazırlanıyor…' : mj ? 'Yeniden montaj yap' : 'Montaj yap'}</span>
           <small>${sur || !n ? '' : `(en iyi ${adetN})`}</small></button>
-        ${sur ? `<div class="mj-bekle"><div class="il-bar belirsiz"><i></i></div><div class="analiz-adim" id="montajSure">${sn} sn · klipler birleştiriliyor</div></div>` : ''}
+        ${sur ? `<div class="mj-bekle"><div class="il-bar belirsiz"><i></i></div><div class="analiz-adim" id="montajSure">${sn} sn · ${S.mjSec.tur === 'paylasim' ? 'video kodlanıyor' : 'klipler birleştiriliyor'}</div></div>` : ''}
         ${S.montajHata && !sur ? `<div class="mj-hata" role="alert">${ikon('i-alert')}<span>${esc(S.montajHata)}</span></div>` : ''}
-        <div class="kayit-bilgi">${ORNEK_MODU ? '<b>Örnek mod:</b> montaj taklit edilir, dosya yazılmaz. ' : ''}Puanı en yüksek ${adetN || ''} klip sırayla tek bir MP4'te birleştirilir (<code>klipler/en_iyi_montaj.mp4</code>); var olan montajın üzerine yazılır. Birkaç saniye ile bir dakika sürebilir.${n && S.mjAdet > n ? ` Şu an yalnız ${n} klip var.` : ''}</div>
+        <div class="kayit-bilgi">${ORNEK_MODU ? '<b>Örnek mod:</b> montaj taklit edilir, dosya yazılmaz. ' : ''}${S.mjSec.tur === 'paylasim'
+          ? `Puanı en yüksek ${adetN || ''} klip ${S.mjSec.dikey ? 'dikey 9:16' : 'yatay 16:9'} olarak yeniden kodlanır${S.mjSec.kart ? ', başa harita/skor kartı' : ''}${S.mjSec.etiket ? ', köşeye kill etiketi' : ''} eklenir (<code>klipler/paylasim/en_iyi_${S.mjSec.dikey ? 'dikey' : 'yatay'}.mp4</code>). Klip başına 10-30 saniye sürebilir; klipler değişmez.`
+          : `Puanı en yüksek ${adetN || ''} klip sırayla tek bir MP4'te birleştirilir (<code>klipler/en_iyi_montaj.mp4</code>); var olan montajın üzerine yazılır. Birkaç saniye ile bir dakika sürebilir.`}${n && S.mjAdet > n ? ` Şu an yalnız ${n} klip var.` : ''}</div>
       </div>
       <div class="mj-kart${mj ? '' : ' bos'}${mj && S.montajYeni ? ' yeni' : ''}">${mj ? montajKartHtml(mj) : `
         <span class="birak-ikon">${ikon('i-film')}</span><strong>Henüz montaj yok</strong>
         <span>${n ? `Klip sayısını seç ve “Montaj yap”a bas. En iyi anların art arda tek videoda birleşir.` : 'Montaj için önce klip kaydetmelisin.'}</span>`}</div>`;
     S.montajYeni = false;
+  }
+  function mjSecenekHtml(sur) {
+    const o = S.mjSec;
+    const dis = sur ? ' disabled' : '';
+    const grup = (et, anahtar, secenekler) => `<div class="kayit-satir"><span class="kayit-et">${et}</span>
+      <div class="secim" role="radiogroup" aria-label="${esc(et)}">${secenekler.map(([v, ad]) =>
+        `<button type="button" role="radio" data-mj-sec="${anahtar}" data-v="${esc(v)}" class="${String(o[anahtar]) === String(v) ? 'aktif' : ''}" aria-checked="${String(o[anahtar]) === String(v)}"${dis}>${ad}</button>`).join('')}</div></div>`;
+    const ac = (anahtar, ad) => `<button type="button" data-mj-ac="${anahtar}" class="${o[anahtar] ? 'aktif' : ''}" aria-pressed="${!!o[anahtar]}"${dis}>${ad}</button>`;
+    let h = grup('Tür', 'tur', [['sade', 'Sade'], ['paylasim', 'Paylaşım']]);
+    if (o.tur !== 'paylasim') return h;
+    h += grup('Biçim', 'dikey', [['false', 'Yatay 16:9'], ['true', 'Dikey 9:16']]);
+    if (o.dikey) h += grup('Yerleşim', 'yerlesim', [['bulanik', 'Bulanık'], ['kirp', 'Kırp']]);
+    h += `<div class="kayit-satir"><span class="kayit-et">Ekler</span><div class="secim">${ac('kart', 'Açılış kartı')}${ac('etiket', 'Kill etiketi')}</div></div>`;
+    h += grup('Kalite', 'kalite', [['1080p', '1080p'], ['1440p', '1440p']]);
+    h += grup('Boyut', 'sikistirma', [['yuksek', 'Yüksek'], ['dengeli', 'Dengeli'], ['kucuk', 'Küçük']]);
+    h += `<label class="kayit-satir mj-alan"><span class="kayit-et">Hedef MB</span><input type="number" min="1" max="4000" step="1" placeholder="boş = Boyut seçimi" data-mj-in="hedefMb" value="${esc(o.hedefMb)}"${dis}></label>`;
+    h += `<label class="kayit-satir mj-alan"><span class="kayit-et">Müzik</span><input type="text" placeholder="isteğe bağlı: C:\\Müzik\\parca.mp3" data-mj-in="muzik" value="${esc(o.muzik)}" spellcheck="false"${dis}></label>`;
+    return h;
+  }
+  const MJ_CRF = { yuksek: 17, dengeli: 20, kucuk: 26 };
+  function mjGovde(adet) {
+    const o = S.mjSec;
+    if (o.tur !== 'paylasim') return { adet };
+    const g = { adet, paylasim: true, dikey: o.dikey, yerlesim: o.yerlesim, kart: o.kart, etiket: o.etiket, kalite: o.kalite, crf: MJ_CRF[o.sikistirma] || 20 };
+    const mb = Number(o.hedefMb);
+    if (o.hedefMb !== '' && mb > 0) g.hedef_mb = mb;
+    if (o.muzik.trim()) g.muzik = o.muzik.trim();
+    return g;
   }
   function montajKartHtml(mj) {
     const serit = S.ei.klipler.slice(0, Math.max(1, Math.min(mj.adet || 1, 20)))
@@ -1511,10 +1547,10 @@
     montajCiz();
     const sayac = setInterval(() => {
       const el = $('#montajSure');
-      if (el) el.textContent = `${Math.floor((Date.now() - S.montajBas) / 1000)} sn · klipler birleştiriliyor`;
+      if (el) el.textContent = `${Math.floor((Date.now() - S.montajBas) / 1000)} sn · ${S.mjSec.tur === 'paylasim' ? 'video kodlanıyor' : 'klipler birleştiriliyor'}`;
     }, 500);
     try {
-      const r = await api('/api/en-iyi/montaj', { method: 'POST', body: JSON.stringify({ adet }) });
+      const r = await api('/api/en-iyi/montaj', { method: 'POST', body: JSON.stringify(mjGovde(adet)) });
       if (!r || !r.klip) throw new Error('Sunucudan geçersiz yanıt geldi.');
       if (S.ei) S.ei.montaj = r;
       S.montajYeni = true;
@@ -1624,6 +1660,13 @@
     if (eiA) { S.eiAdet = +eiA.dataset.eiAdet; vitrinCiz(); return; }
     const mjA = t.closest('[data-mj-adet]');
     if (mjA) { if (!mjA.disabled) { S.mjAdet = +mjA.dataset.mjAdet; montajCiz(); } return; }
+    const mjS = t.closest('[data-mj-sec]');
+    if (mjS) {
+      if (!mjS.disabled) { const k = mjS.dataset.mjSec; S.mjSec[k] = k === 'dikey' ? mjS.dataset.v === 'true' : mjS.dataset.v; montajCiz(); }
+      return;
+    }
+    const mjAc = t.closest('[data-mj-ac]');
+    if (mjAc) { if (!mjAc.disabled) { S.mjSec[mjAc.dataset.mjAc] = !S.mjSec[mjAc.dataset.mjAc]; montajCiz(); } return; }
     if (t.closest('#montajYap')) { montajYap(); return; }
     const mjO = t.closest('[data-mj-oynat]');
     if (mjO) { montajOynat(mjO); return; }
@@ -1690,6 +1733,11 @@
     }
     if ((e.key === 'Enter' || e.key === ' ') && e.target === $('#birak')) { e.preventDefault(); $('#dosyaSec').click(); return; }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('th[data-sira]')) { e.preventDefault(); siralaDegis(e.target); }
+  });
+  // Montaj seçeneklerindeki metin kutuları: yalnız durumu güncelle (yeniden çizmek odağı kaçırır).
+  document.addEventListener('input', (e) => {
+    const el = e.target.closest && e.target.closest('[data-mj-in]');
+    if (el) S.mjSec[el.dataset.mjIn] = el.value;
   });
   $('#dosyaSec').addEventListener('change', (e) => { if (e.target.files.length) dosyalariAl(e.target.files); e.target.value = ''; });
 

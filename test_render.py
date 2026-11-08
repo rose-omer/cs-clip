@@ -11,6 +11,7 @@ from render import (
     concat_list,
     failure,
     record_demo,
+    segment_args,
     select_clips,
     video_args,
 )
@@ -190,3 +191,20 @@ def test_record_timeout_grows_with_footage():
     from render import START_ALLOWANCE, record_timeout
 
     assert record_timeout([{**H, "segments": [[0, 640]]}]) == START_ALLOWANCE + 6 * 10
+
+
+def test_quality_args():
+    from render import quality_args
+    assert quality_args() == []
+    assert quality_args("1440p", 18) == ["--width", "2560", "--height", "1440", "--ffmpeg-crf", "18"]
+    assert quality_args("1080p") == ["--width", "1920", "--height", "1080"]
+    for bad in (("4k", 0), ("", 99), ("", True)):
+        with pytest.raises(SystemExit):
+            quality_args(*bad)
+
+
+def test_quality_reaches_both_csdm_commands():
+    q = ["--width", "2560", "--height", "1440"]
+    assert video_args(Path("csdm"), Path("d.dem"), "1", [3], 3, 2, True, q)[-4:] == q
+    assert segment_args(Path("csdm"), Path("d.dem"), "1", 10, 20, True, q)[-4:] == q
+    assert video_args(Path("csdm"), Path("d.dem"), "1", [3], 3, 2, True)[-1] == "--no-player-voices"

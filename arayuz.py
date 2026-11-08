@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import eniyi
+import paylas
 import render
 from analyze import analyze, save_json
 from config import load_config
@@ -155,9 +156,11 @@ class App:
         return eniyi.best_clips(self.out_dir, by_code)
 
     def best(self) -> dict:
-        return {"klipler": self.best_clips(), "montaj": eniyi.montage_info(self.out_dir)}
+        return {"klipler": self.best_clips(), "montaj": eniyi.montage_info(self.out_dir),
+                "paylasim": paylas.share_info(self.out_dir)}
 
-    def best_montage(self, count: int) -> dict:
+    def best_montage(self, count: int, share: paylas.Options | None = None) -> dict:
+        """share verilirse klipler paylaşım videosu olarak yeniden kodlanır (dikey/kart/etiket/müzik/kalite)."""
         if not self.montage_lock.acquire(blocking=False):
             raise ApiError(HTTPStatus.CONFLICT, "Montaj sürüyor.")
         try:
@@ -168,6 +171,8 @@ class App:
             if ffmpeg is None:
                 raise ApiError(HTTPStatus.CONFLICT,
                                "Montaj için ffmpeg bulunamadı (winget install Gyan.FFmpeg ya da ayarlarda ffmpeg_yolu).")
+            if share is not None:
+                return self._share_video(clips, ffmpeg, share)
             out = self.out_dir / eniyi.MONTAGE_NAME
             part = out.with_name(out.stem + ".part.mp4")  # oynatılan montaj yarım dosyayla bozulmasın
             try:
@@ -194,6 +199,25 @@ class App:
             return {"klip": info["klip"], "adet": len(clips), "boyut_mb": info["boyut_mb"], "tarih": info["tarih"]}
         finally:
             self.montage_lock.release()
+
+    def _share_video(self, clips: list[dict], ffmpeg: Path, opts: paylas.Options) -> dict:
+        stats = {}
+        for did, p in self.demos().items():
+            if (s := paylas.read_json(p.parent / f"{did}.stats.json")) is not None:
+                stats.setdefault(match_code(did), s)
+        out = self.out_dir / paylas.SHARE_DIR / paylas.api_output_name(opts)
+        try:
+            paylas.make_share_video(clips, self.out_dir, out, ffmpeg, opts, self.cfg["oyuncu"], stats)
+        except ValueError as e:
+            raise ApiError(HTTPStatus.CONFLICT, str(e))
+        except PermissionError:
+            raise ApiError(HTTPStatus.CONFLICT, "Video dosyası kullanımda (oynatılıyor olabilir); kapatıp tekrar deneyin.")
+        except subprocess.CalledProcessError as e:
+            raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, f"ffmpeg videoyu üretemedi (çıkış kodu {e.returncode}).")
+        paylas.write_meta(out, clips, opts)
+        info = next(i for i in paylas.share_info(self.out_dir) if i["dikey"] == opts.dikey)
+        return {"klip": info["klip"], "adet": len(clips), "boyut_mb": info["boyut_mb"], "tarih": info["tarih"],
+                "dikey": opts.dikey, "secenekler": info["secenekler"]}
 
     # --- kayıt ---
     def start_recording(self, did: str, best: int) -> dict:
@@ -325,7 +349,13 @@ def make_handler(app: App):
                     count = eniyi.parse_count(data)
                     if count is None:
                         raise ApiError(HTTPStatus.BAD_REQUEST, f"adet 1 ile {eniyi.MAX_COUNT} arasında bir sayı olmalı.")
-                    return app.best_montage(count)
+                    share = None
+                    if paylas.wants_share(data):  # yeni alanlar yoksa eski hızlı montaj
+                        try:
+                            share = paylas.parse_options(data)
+                        except ValueError as e:
+                            raise ApiError(HTTPStatus.BAD_REQUEST, str(e))
+                    return app.best_montage(count, share)
                 return self.handle_api(montage)
             self.send_json({"hata": "Bulunamadı."}, HTTPStatus.NOT_FOUND)
 
