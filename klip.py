@@ -23,6 +23,7 @@ from render import (
     analyze_args,
     clip_filename,
     make_montage,
+    quality_args,
     record_demo,
     run_streaming,
     select_clips,
@@ -97,6 +98,7 @@ def main() -> None:
     min_score = cfg["min_skor"] if args.min_skor is None else args.min_skor
     limit = cfg["mac_basi_en_fazla"] if args.en_iyi is None else args.en_iyi
     pre, post = cfg["once_sn"], cfg["sonra_sn"]
+    quality = quality_args(cfg["kayit_cozunurluk"], cfg["kayit_crf"])
     demos = collect_demos(args.hedef)
     if not demos:
         raise SystemExit(f"Demo bulunamadı: {args.hedef}")
@@ -119,7 +121,7 @@ def main() -> None:
         for demo, steamid, prefix, clips in plan:
             print(f"\n{demo.name}:")
             print("  " + " ".join(video_args(Path("csdm"), demo, steamid, [c["round"] for c in clips],
-                                             pre, post, cfg["temiz_hud"])))
+                                             pre, post, cfg["temiz_hud"], quality)))
             for c in clips:
                 print(f"  -> {out_dir / clip_filename(prefix, c)}")
         return
@@ -145,7 +147,8 @@ def main() -> None:
             def record():
                 # Onarılmış demolarda her parça ayrı açılışta: CS2 ikinci atlamada çöküyor.
                 return record_demo(rec, clips, steamid, prefix, out_dir, tools["csdm"], tools["ffmpeg"],
-                                   pre, post, cfg["temiz_hud"], env=tools["env"], per_segment=bool(problems))
+                                   pre, post, cfg["temiz_hud"], env=tools["env"], per_segment=bool(problems),
+                                   quality=quality)
 
             try:
                 made += record()

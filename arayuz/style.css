@@ -713,6 +713,9 @@ a.btn-ikincil{text-decoration:none}
 .btn-montaj.calisiyor:disabled{cursor:progress}
 .mj-bekle{display:flex;flex-direction:column;gap:2px}
 .mj-bekle .analiz-adim{text-align:left;margin-top:8px}
+.mj-alan input{flex:1;min-width:0;height:32px;padding:0 10px;background:var(--panel);border:1px solid var(--line2);color:var(--text);font:13px var(--f-mono)}
+.mj-alan input:focus{outline:none;border-color:var(--or)}
+.mj-alan input:disabled{opacity:.5}
 .mj-hata{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;font-size:13px;line-height:1.4;color:var(--text);background:var(--kotu-a);border-left:3px solid var(--kotu)}
 .mj-hata svg{color:var(--kotu);margin-top:1px}
 .mj-kart{display:flex;flex-direction:column;gap:14px;padding:16px;background:#0e1118;border:1px solid var(--line);min-width:0}

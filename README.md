@@ -68,6 +68,8 @@ arayüz kayıttan önce kendisi başlatır.
 - **Ayarlar** sayfası (`#ayarlar`): oyuncu, en düşük puan, maç başına klip, klip öncesi/sonrası süre, temiz HUD,
   montaj, klip ve demo klasörleri, araç yolları. Değerler doğrulanıp `ayarlar.json`'a yazılır (`GET/POST /api/ayarlar`).
   Oyuncu ya da süreler değişince maçların analizi yeniden yapılır.
+- "En iyi anlarım" → Montaj: **Sade** en iyi klipleri yeniden kodlamadan birleştirir; **Paylaşım** aşağıdaki
+  paylaşım videosunu üretir (biçim, yerleşim, kart, etiket, kalite, boyut, müzik seçilebilir).
 
 ## Tam otomatik akış
 
@@ -103,6 +105,34 @@ demoyu Geri Dönüşüm Kutusu'na taşır), `arayuz.bat --otomatik` (izleyiciyi 
 
 Demo dosyasını `klip.bat` üzerine sürükle-bırak da çalışır.
 
+### Paylaşım videosu (LinkedIn / TikTok / Reels)
+
+CS2 gerekmez, yalnız FFmpeg. Klipler değişmez; çıktı `klipler/paylasim/` altına yeni adla yazılır.
+
+```
+python paylas.py --dikey --en-iyi 5                     # en iyi 5 klip, 9:16, kart + etiket
+python paylas.py --en-iyi 10 --kalite 1440p --hedef-mb 80
+python paylas.py klipler\a.mp4 klipler\b.mp4 --dikey --yerlesim kirp --muzik parca.mp3
+```
+
+| Seçenek | Ne yapar |
+|---|---|
+| `--dikey` | 1080x1920 (1440p'de 1440x2560); yoksa yatay 1920x1080 / 2560x1440 |
+| `--yerlesim bulanik\|kirp` | Dikeyde oyun görüntüsü bulanık arka planın ortasında ya da ortadan kırpılmış |
+| `--kartsiz` | Baştaki 2,5 sn'lik kart olmasın (oyuncu, harita, skor, rating, ADR, K/D; `.stats.json` yoksa yalnız harita) |
+| `--etiketsiz` | Kliplerde "4K · 1v3 CLUTCH" etiketi olmasın |
+| `--muzik DOSYA` | Arka plan müziği; oyun sesi kısılır (`--oyun-ses 0.35`, `--muzik-ses 0.8`) |
+| `--kalite 1080p\|1440p` | Çözünürlük |
+| `--crf N` / `--hedef-mb N` | Kalite (varsayılan CRF 20) ya da yaklaşık dosya boyutu |
+| `--prova` | Üretmeden ffmpeg komutunu ve filtreyi gösterir |
+
+Arayüz API'si: `POST /api/en-iyi/montaj` gövdesine `dikey`, `yerlesim`, `kart`, `etiket`, `muzik`,
+`oyun_ses`, `muzik_ses`, `kalite`, `crf`, `hedef_mb` (ya da `"paylasim": true`) eklenirse paylaşım videosu
+üretilir; bu alanlar yoksa eski hızlı montaj. `GET /api/en-iyi` yanıtında `paylasim` listesi var.
+
+Kayıt kalitesi `ayarlar.json`'da: `"kayit_cozunurluk": "1440p"` (ya da `"1080p"`), `"kayit_crf": 18`;
+boş / 0 ise CSDM'in kendi ayarı kullanılır.
+
 Kayıttan önce **FACEIT ve CS2 kapalı olmalı**. Araç bunları kapatmaz, yalnız söyler. Kapalı PostgreSQL'i kendisi başlatır.
 Klibi hazır olan round atlanır; yarıda kalan iş aynı komutla sürdürülür. CS2'yi çökerten demo atlanır, sıradakine geçilir.
 Başa sarınca CS2'yi çökerten demolar (ilk tam paketi bozuk, ör. bazı Ancient maçları) kayıttan önce kendiliğinden
@@ -135,6 +165,8 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | `demofile.py` | Sıkıştırılmış demoyu açar, CS2 klasörünü bulur, Geri Dönüşüm Kutusu |
 | `render.py` | CSDM ile kayıt, parçaları round'a atama, birleştirme, montaj |
 | `kur.bat`, `kurulum.py` | Tek tıkla kurulum (`--prova`: değiştirmeden göster) |
+
+| `paylas.py` | Paylaşım videosu: dikey/yatay, açılış kartı, kill etiketi, müzik, kalite |
 | `kontrol.py` | Kayıt öncesi kontroller, PostgreSQL başlatma |
 | `otomatik.py`, `otomatik.bat` | Klasör izleyici + kayıt kuyruğu (`otomatik.json`) |
 | `faceit.py` | FACEIT Data API ile son maç demolarını indirme |

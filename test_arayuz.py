@@ -270,3 +270,59 @@ def test_kuyruk_kaydederken_arayuz_kayit_baslatmaz(server, monkeypatch):
     with arayuz.otomatik.kayit_kilidi(a.kilit):
         code, data = post_error(url + "/api/demo/1-aaaa1111-x-1-1/kaydet", {"en_iyi": 3})
     assert code == 409 and "Otomatik kuyruk" in data["hata"]
+
+
+@pytest.fixture
+def fake_share(monkeypatch):
+    """paylas.make_share_video yerine: seçenekleri kaydeder, küçük bir dosya yazar."""
+    calls = []
+
+    def make(rows, clip_dir, out, ffmpeg, opts, player, stats=None, **kw):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"x" * 2048)
+        calls.append({"klipler": [r["ad"] for r in rows], "cikti": out.name, "opts": opts, "oyuncu": player,
+                      "stats": sorted(stats or {})})
+        return out
+
+    monkeypatch.setattr(arayuz.paylas, "make_share_video", make)
+    return calls
+
+
+def test_share_montage_uses_new_fields(server, fake_ffmpeg, fake_share):
+    url, (a, demos, clips) = server
+    (demos / "1-a95f6ac2-x-1-1.dem").write_bytes(b"d")
+    (demos / "1-a95f6ac2-x-1-1.stats.json").write_text(json.dumps({"harita": "de_dust2"}), encoding="utf-8")
+    (clips / "dust2_a95f6ac2_R05_2K_m4a1.mp4").write_bytes(b"2K|")
+    (clips / "dust2_a95f6ac2_R09_3K_3-HS_m4a1.mp4").write_bytes(b"3K|")
+    status, data = post_json(url + "/api/en-iyi/montaj", {"adet": 1, "dikey": True, "yerlesim": "kirp",
+                                                           "kalite": "1440p", "hedef_mb": 40})
+    assert status == 200 and not fake_ffmpeg  # eski hızlı montaj çalışmadı
+    assert data["klip"] == "/klip/paylasim/en_iyi_dikey.mp4" and data["adet"] == 1 and data["dikey"] is True
+    [call] = fake_share
+    assert call["klipler"] == ["dust2_a95f6ac2_R09_3K_3-HS_m4a1.mp4"] and call["stats"] == ["a95f6ac2"]
+    o = call["opts"]
+    assert (o.dikey, o.yerlesim, o.kalite, o.hedef_mb, o.kart, o.etiket) == (True, "kirp", "1440p", 40, True, True)
+    assert json.loads((clips / "paylasim" / "en_iyi_dikey.json").read_text(encoding="utf-8"))["adet"] == 1
+    with urllib.request.urlopen(url + "/api/en-iyi") as r:
+        listed = json.loads(r.read())
+    assert [p["klip"] for p in listed["paylasim"]] == ["/klip/paylasim/en_iyi_dikey.mp4"]
+    assert listed["montaj"] is None and len(listed["klipler"]) == 2  # paylaşım videosu listeye girmez
+    with urllib.request.urlopen(url + "/klip/paylasim/en_iyi_dikey.mp4") as r:
+        assert r.read() == b"x" * 2048
+
+
+def test_share_montage_bad_option(server, fake_ffmpeg, fake_share):
+    url, (_, _, clips) = server
+    (clips / "dust2_a95f6ac2_R05_2K_m4a1.mp4").write_bytes(b"v")
+    code, data = post_error(url + "/api/en-iyi/montaj", {"adet": 2, "kalite": "8k"})
+    assert code == 400 and "kalite" in data["hata"]
+    code, data = post_error(url + "/api/en-iyi/montaj", {"adet": 2, "muzik": "yok.mp3"})
+    assert code == 400 and "Müzik" in data["hata"]
+    assert not fake_share and not fake_ffmpeg
+
+
+def test_plain_montage_unchanged_without_share_fields(server, fake_ffmpeg, fake_share):
+    url, (_, _, clips) = server
+    (clips / "dust2_a95f6ac2_R05_2K_m4a1.mp4").write_bytes(b"v")
+    status, data = post_json(url + "/api/en-iyi/montaj", {"adet": 2})
+    assert data["klip"] == "/klip/en_iyi_montaj.mp4" and fake_ffmpeg and not fake_share
