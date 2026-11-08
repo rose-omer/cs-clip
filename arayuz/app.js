@@ -819,7 +819,7 @@
       </section>
       ${derinHtml(s)}
       <section class="panel giris" id="herkes" style="--d:320ms">
-        <div class="bas"><h2><span class="bas-no"><span>07</span></span>Herkesin en iyi anı</h2><span class="bas-ek" id="herkesOzet">Maçtaki her oyuncunun en yüksek puanlı anı</span></div>
+        <div class="bas"><h2><span class="bas-no"><span>${derinVar(s) ? '10' : '08'}</span></span>Herkesin en iyi anı</h2><span class="bas-ek" id="herkesOzet">Maçtaki her oyuncunun en yüksek puanlı anı</span></div>
         <div id="herkesListe"></div>
       </section>`;
     tablolariCiz();
@@ -2525,6 +2525,42 @@
     } catch (e) {
       if (e && e.name !== 'AbortError') bildir('Paylaşılamadı: ' + e.message, 'hata');
     }
+  }
+
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t.closest('a[href="#kariyer"]')) {
+      e.preventDefault();
+      if (location.hash.slice(1) === KARIYER) kariyerAc(); else location.hash = KARIYER;
+      return;
+    }
+    if (t.closest('[data-kr-yenile]')) { kariyerYukle(true); return; }
+    const km = t.closest('[data-kr-metrik]');
+    if (km) {
+      S.krMetrik = km.dataset.krMetrik;
+      $$('[data-kr-metrik]').forEach((b) => { b.classList.toggle('aktif', b === km); b.setAttribute('aria-pressed', String(b === km)); });
+      grafikCiz();
+      return;
+    }
+    const ka = t.closest('[data-kart-ac]');
+    if (ka) { kartAc(ka); return; }
+    const kb = t.closest('[data-kart-boyut]');
+    if (kb) {
+      S.kartBoyut = kb.dataset.kartBoyut;
+      $$('[data-kart-boyut]').forEach((b) => { b.classList.toggle('aktif', b === kb); b.setAttribute('aria-checked', String(b === kb)); });
+      kartCiz();
+      return;
+    }
+    if (t.closest('[data-kart-indir]')) { kartIndir(); return; }
+    if (t.closest('[data-kart-kopyala]')) { kartKopyala(); return; }
+    if (t.closest('[data-kart-paylas]')) kartPaylas();
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('tr.kr-satir[data-demo]')) {
+      e.preventDefault();
+      demoSec(e.target.dataset.demo);
+    }
+  });
 
   /* ======== derin analiz: ısı haritası, utility, nişan (stats.json "derin" bloğu, analiz_derin.py) ======== */
   const DERIN_SURUM = 1;
@@ -2754,39 +2790,6 @@
 
   document.addEventListener('click', (e) => {
     const t = e.target;
-    if (t.closest('a[href="#kariyer"]')) {
-      e.preventDefault();
-      if (location.hash.slice(1) === KARIYER) kariyerAc(); else location.hash = KARIYER;
-      return;
-    }
-    if (t.closest('[data-kr-yenile]')) { kariyerYukle(true); return; }
-    const km = t.closest('[data-kr-metrik]');
-    if (km) {
-      S.krMetrik = km.dataset.krMetrik;
-      $$('[data-kr-metrik]').forEach((b) => { b.classList.toggle('aktif', b === km); b.setAttribute('aria-pressed', String(b === km)); });
-      grafikCiz();
-      return;
-    }
-    const ka = t.closest('[data-kart-ac]');
-    if (ka) { kartAc(ka); return; }
-    const kb = t.closest('[data-kart-boyut]');
-    if (kb) {
-      S.kartBoyut = kb.dataset.kartBoyut;
-      $$('[data-kart-boyut]').forEach((b) => { b.classList.toggle('aktif', b === kb); b.setAttribute('aria-checked', String(b === kb)); });
-      kartCiz();
-      return;
-    }
-    if (t.closest('[data-kart-indir]')) { kartIndir(); return; }
-    if (t.closest('[data-kart-kopyala]')) { kartKopyala(); return; }
-    if (t.closest('[data-kart-paylas]')) kartPaylas();
-  });
-  document.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('tr.kr-satir[data-demo]')) {
-      e.preventDefault();
-      demoSec(e.target.dataset.demo);
-    }
-  });
-
     if (t.closest('[data-dr-yenile]')) { derinYenile(S.secili); return; }
     const b = t.closest('#drYan .secim button');
     if (!b) return;
