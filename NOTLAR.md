@@ -52,11 +52,9 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
   Eski `obs_*`, `netcon_port`, `yukleme_bekle` yok sayılır.
 - Yeni bayraklar: `--kontrol`, `--en-iyi N`, `--temizle` (Geri Dönüşüm Kutusu).
 - Klip adı: `harita_maçkodu_Rround_etiketler_silah.mp4`.
-- 41 test geçiyor. `--kontrol` ve `--prova` gerçek bilgisayarda denendi.
-  **Gerçek kayıt yeni kodla henüz denenmedi** (o sırada CS2 ve FACEIT açıktı).
+- 42 test geçiyor. `--kontrol`, `--prova` ve gerçek kayıt (2026-11-08, 3 klip + montaj) doğrulandı.
 
 ### Sıradaki adımlar
-1. Yeni kodla gerçek kayıt: `klip.bat <demo> --en-iyi 3` (FACEIT ve CS2 kapalıyken).
 2. `olcum.ps1`'i düzelt, aşamaları ölç; CSDM `--recording-system HLAE` dene (TGA'sız kayıt).
 3. Downloads izleme modu (yeni demo gelince otomatik kayıt).
 4. Steam'deki `-netconport 2121 -windowed -noborder` başlatma seçeneği artık gereksiz; istenirse kaldırılır.

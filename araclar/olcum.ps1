@@ -10,9 +10,11 @@ New-Item -ItemType Directory -Force $cikti | Out-Null
 $env:Path += ';C:\Program Files\PostgreSQL\17\bin'
 
 $argumanlar = "video `"$demo`" --mode player --steamids 76561198963443734 --event kills --rounds 20,22 " +
-    "--start-seconds-before 5 --end-seconds-after 3 --no-concatenate-sequences --recording-system $Sistem --close-game-after-recording"
+    "--start-seconds-before 3 --end-seconds-after 2 --no-concatenate-sequences --recording-system $Sistem --close-game-after-recording"
 $basla = Get-Date
-$p = Start-Process cmd.exe -ArgumentList "/c `"$csdm`" $argumanlar > `"$cikti\csdm.txt`" 2>&1" -PassThru -WindowStyle Hidden
+# cmd /c ile ic ice tirnak bozuluyordu; .cmd dosyasini dogrudan baslat
+$p = Start-Process $csdm -ArgumentList $argumanlar -PassThru -WindowStyle Hidden `
+    -RedirectStandardOutput "$cikti\csdm.txt" -RedirectStandardError "$cikti\csdm-hata.txt"
 
 $satirlar = @()
 $enCokKare = 0; $enCokMB = 0

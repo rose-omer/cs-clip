@@ -47,8 +47,8 @@ def clip_filename(prefix: str, h: dict) -> str:
 
 
 def concat_list(paths: list[Path]) -> str:
-    """ffmpeg concat demuxer listesi."""
-    return "\n".join("file '" + p.as_posix().replace("'", "'\\''") + "'" for p in paths)
+    """ffmpeg concat demuxer listesi. Yollar mutlak: ffmpeg göreli yolu listenin klasörüne göre çözer."""
+    return "\n".join("file '" + Path(p).resolve().as_posix().replace("'", "'\\''") + "'" for p in paths)
 
 
 def analyze_args(csdm: Path, demo: Path) -> list[str]:
@@ -180,9 +180,9 @@ def make_montage(paths: list[Path], out: Path, ffmpeg: Path | str | None = None)
         return None
     lst = out.with_suffix(".txt")
     lst.write_text(concat_list(paths), encoding="utf-8")
-    subprocess.run(
-        [str(ffmpeg), "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out)],
-        check=True,
-    )
-    lst.unlink()
+    try:
+        subprocess.run([str(ffmpeg), "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lst),
+                        "-c", "copy", str(out)], check=True)
+    finally:
+        lst.unlink(missing_ok=True)
     return out
