@@ -33,6 +33,8 @@ Kurulum: **[YAPILACAKLAR.md](YAPILACAKLAR.md)**. Bilinen sorunlar ve ölçümler
 - Solda İndirilenler ve `demos/` klasöründeki demolar; sürükle-bırak ile demo yüklenebilir.
 - Demo seçince maç istatistikleri: skor, rating, ADR, K/D/A, KAST, HS%, açılış kill'leri, iki takımın skor tablosu, round çizelgesi, silahlar.
 - Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı).
+- Skor tablosunda bir oyuncuya tıklayınca onun highlight'ları listelenir; "Bu oyuncunun kliplerini kaydet" onun gözünden kaydeder.
+  "Herkesin en iyi anı" maçtaki her oyuncunun en yüksek puanlı anını sıralar. "En iyi anlarım" vitrininde oyuncuya göre süzülür.
 - İlk açılışta istatistik hesaplanır ve demonun yanına `.stats.json` olarak saklanır; sonraki açılışlar anında.
 
 ## Komutlar
@@ -46,7 +48,7 @@ Kurulum: **[YAPILACAKLAR.md](YAPILACAKLAR.md)**. Bilinen sorunlar ve ölçümler
 | `klip.bat --kontrol` | Kayıt öncesi kontrol: araçlar, veritabanı, FACEIT/CS2 açık mı, disk |
 | `--en-iyi N` | Maç başına yalnız en iyi N an |
 | `--temizle` | Kaydı biten demoyu Geri Dönüşüm Kutusu'na taşır |
-| `--oyuncu AD` | Başka oyuncunun anları |
+| `--oyuncu AD` | Başka oyuncunun anları (ad ya da SteamID64); klip adına `p-<ad>` eklenir: `anubis_59cf10f2_R05_p-Mert06_4K_ak47.mp4` |
 | `--min-skor N` | Eşik (varsayılan 3) |
 
 Demo dosyasını `klip.bat` üzerine sürükle-bırak da çalışır.
