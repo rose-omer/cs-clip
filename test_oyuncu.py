@@ -15,7 +15,7 @@ import eniyi
 import klip
 from demofile import demo_files
 from render import clip_filename
-from test_arayuz import app, fake_ffmpeg, post_error, post_json, server  # noqa: F401 (fikstürler)
+from test_arayuz import post_error, post_json
 
 DEFAULT_SID, MERT_SID = "76561198963443734", "76561198877001245"
 HL = {"round": 5, "score": 10.0, "labels": ["4K"], "weapons": ["ak47"], "start_tick": 0, "end_tick": 640}

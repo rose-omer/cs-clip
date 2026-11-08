@@ -4,7 +4,6 @@ import urllib.request
 
 import arayuz
 import kariyer
-from test_arayuz import app, server  # noqa: F401  (pytest fikstürleri)
 
 
 def stats(harita="de_anubis", biz=13, onlar=9, rating=1.05, ben_takim=0, ben=True):

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -279,7 +280,8 @@ def test_helpers():
     dst = {"a": 1, "b": {"c": 2}}
     assert kurulum.fill_missing(dst, {"a": 9, "b": {"c": 9, "d": 3}, "e": [1]}) == ["b.d", "e"]
     assert dst == {"a": 1, "b": {"c": 2, "d": 3}, "e": [1]}
-    assert kurulum.same_path(r"C:\A\b\\", "c:/a/B")
+    if os.name == "nt":  # Windows yolları büyük/küçük harf duyarsız
+        assert kurulum.same_path(r"C:\A\b\\", "c:/a/B")
 
 
 def test_template_has_no_personal_data():

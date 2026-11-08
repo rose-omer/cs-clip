@@ -308,8 +308,6 @@ def test_record_demo_does_not_retry_permanent_errors(tmp_path):
 
 
 def test_record_demo_falls_back_to_hlae_after_cs_attempts(tmp_path, monkeypatch):
-    import render
-
     demo = tmp_path / "m.dem"
     demo.write_bytes(b"d")
     systems = []
