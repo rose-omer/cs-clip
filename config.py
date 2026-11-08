@@ -16,6 +16,7 @@ DEFAULTS = {
     "csdm_yolu": "",  # boşsa %LOCALAPPDATA%\Programs\cs-demo-manager\csdm.cmd
     "ffmpeg_yolu": "",  # boşsa PATH ve winget klasörü aranır
     "pg_veri_klasoru": "",  # boşsa %LOCALAPPDATA%\csdm-pg\data
+    "demo_klasorleri": [],  # arayüzün demo aradığı klasörler; boşsa İndirilenler + demos/
 }
 
 # OBS/netcon dönemi ayarları: eski ayarlar.json bozulmasın diye yok sayılır.

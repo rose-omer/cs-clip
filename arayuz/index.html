@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cs-klip</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="uygulama">
+  <aside class="kenar">
+    <div class="logo">cs<span>-klip</span></div>
+
+    <div id="kontrol" class="kontrol">Kontrol ediliyor…</div>
+
+    <label id="birak" class="birak" tabindex="0">
+      <input id="dosyaSec" type="file" accept=".dem,.zst,.gz,.bz2" multiple hidden>
+      <strong>Demo yükle</strong>
+      <span>.dem dosyasını buraya sürükle ya da tıkla</span>
+      <small>.dem · .dem.zst · .dem.gz · .dem.bz2</small>
+    </label>
+    <div id="yukleme" class="yukleme" hidden>
+      <div class="yukleme-ad" id="yuklemeAd"></div>
+      <div class="cubuk"><div id="yuklemeCubuk"></div></div>
+      <div class="yukleme-yuzde" id="yuklemeYuzde"></div>
+    </div>
+
+    <div class="kenar-baslik">
+      Demolar
+      <button id="yenile" class="ikon-dugme" title="Listeyi yenile" aria-label="Listeyi yenile">↻</button>
+    </div>
+    <ul id="demolar" class="demolar"></ul>
+  </aside>
+
+  <main id="ana" class="ana">
+    <div class="bos-durum">
+      <h2>Bir demo seç</h2>
+      <p>Soldaki listeden bir demo seç ya da yeni bir demo yükle.</p>
+    </div>
+  </main>
+</div>
+<div id="ipucu" class="ipucu" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

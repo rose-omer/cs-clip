@@ -6,6 +6,15 @@ Akış: demo (`.dem` / `.dem.zst` / `.gz` / `.bz2`) → analiz → CS Demo Manag
 
 Kurulum: **[YAPILACAKLAR.md](YAPILACAKLAR.md)**. Bilinen sorunlar ve ölçümler: [NOTLAR.md](NOTLAR.md).
 
+## Arayüz
+
+`arayuz.bat` → tarayıcıda `http://127.0.0.1:8765/` açılır (yalnız bu bilgisayardan erişilir).
+
+- Solda İndirilenler ve `demos/` klasöründeki demolar; sürükle-bırak ile demo yüklenebilir.
+- Demo seçince maç istatistikleri: skor, rating, ADR, K/D/A, KAST, HS%, açılış kill'leri, iki takımın skor tablosu, round çizelgesi, silahlar.
+- Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı).
+- İlk açılışta istatistik hesaplanır ve demonun yanına `.stats.json` olarak saklanır; sonraki açılışlar anında.
+
 ## Komutlar
 
 | Komut | Ne yapar |
@@ -52,6 +61,8 @@ Klibi hazır olan round atlanır; yarıda kalan iş aynı komutla sürdürülür
 | `demofile.py` | Sıkıştırılmış demoyu açar, CS2 klasörünü bulur, Geri Dönüşüm Kutusu |
 | `render.py` | CSDM ile kayıt, parçaları round'a atama, birleştirme, montaj |
 | `kontrol.py` | Kayıt öncesi kontroller, PostgreSQL başlatma |
+| `stats.py` | Maç istatistikleri (rating, ADR, KAST, round çizelgesi) |
+| `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa |
 | `config.py` | `ayarlar.json` okur |
 | `araclar/` | Hız ölçüm script'leri |
 | `test_*.py` | Testler: `.venv\Scripts\python -m pytest -q` |
