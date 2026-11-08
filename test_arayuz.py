@@ -143,7 +143,7 @@ def test_best_clips_endpoint(server):
         ("dust2_a95f6ac2_R09_3K_3-HS_m4a1.mp4", 21.0, False, "1-a95f6ac2-x-1-1"),
         ("anubis_e3c103b2_R11_1v3clutch_4K_hegrenade_m4a1_silencer.mp4", 17.0, True, None)]
     assert set(data["klipler"][1]) == {"ad", "klip", "harita", "kod", "round", "etiketler", "silahlar", "skor",
-                                       "tahmini", "demo", "tarih", "boyut_mb"}
+                                       "tahmini", "demo", "tarih", "boyut_mb", "oyuncu", "oyuncu_ad"}
 
 
 def test_best_montage_builds_in_score_order(server, fake_ffmpeg):
@@ -155,7 +155,7 @@ def test_best_montage_builds_in_score_order(server, fake_ffmpeg):
     status, data = post_json(url + "/api/en-iyi/montaj", {"adet": 2})
     assert status == 200
     assert (data["klip"], data["adet"]) == ("/klip/en_iyi_montaj.mp4", 2)
-    assert set(data) == {"klip", "adet", "boyut_mb", "tarih"}
+    assert set(data) == {"klip", "adet", "oyuncu", "boyut_mb", "tarih"}
     assert fake_ffmpeg == [{"liste": ["anubis_e3c103b2_R11_1v3clutch_4K_hegrenade_m4a1_silencer.mp4",
                                       "dust2_a95f6ac2_R09_3K_3-HS_m4a1.mp4"], "cikti": "en_iyi_montaj.part.mp4"}]
     assert (clips / "en_iyi_montaj.mp4").read_bytes() == b"clutch|3K|"

@@ -47,8 +47,9 @@ def select_clips(highlights: list[dict], min_score: float, limit: int = 0) -> li
     return sorted(chosen, key=lambda h: h["start_tick"])
 
 
-def clip_filename(prefix: str, h: dict) -> str:
-    parts = [*h["labels"], *h.get("weapons", [])[:1]]
+def clip_filename(prefix: str, h: dict, player: str = "") -> str:
+    """{önek}_R{round}_{etiketler}_{silah}.mp4; player (analyze.player_tag) verilirse R'den sonra p-<etiket>."""
+    parts = [*([f"p-{player}"] if player else []), *h["labels"], *h.get("weapons", [])[:1]]
     tag = "_".join(re.sub(r'[<>:"/\\|?*]', "", p).replace(" ", "-") for p in parts)
     return f"{prefix}_R{h['round']:02d}_{tag}.mp4" if tag else f"{prefix}_R{h['round']:02d}.mp4"
 
@@ -210,6 +211,7 @@ def record_demo(
     per_segment: bool = False,
     fallback: bool = True,
     quality: list[str] | tuple = (),
+    player: str = "",
 ) -> list[Path]:
     """Demonun kliplerini tek CS2 açılışında kaydeder; hazır klipleri atlar.
 
@@ -218,9 +220,10 @@ def record_demo(
     Parçası kaydedilemeyen klip atlanır, diğerleri korunur.
     fallback: tek açılış çöker/takılırsa parça parça yeniden dener.
     quality: quality_args() çıktısı (çözünürlük / CRF).
+    player: varsayılan oyuncu dışındakilerin klip adı etiketi (clip_filename).
     """
     out_dir = Path(out_dir)
-    targets = {i: out_dir / clip_filename(prefix, h) for i, h in enumerate(clips)}
+    targets = {i: out_dir / clip_filename(prefix, h, player) for i, h in enumerate(clips)}
     todo = [i for i, dst in targets.items() if not dst.exists()]
     for i in targets.keys() - set(todo):
         print(f"  zaten var: {targets[i].name}")

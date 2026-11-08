@@ -65,6 +65,8 @@ arayüz kayıttan önce kendisi başlatır.
 - Demo seçince maç istatistikleri: skor, rating, ADR, K/D/A, KAST, HS%, açılış kill'leri, iki takımın skor tablosu, round çizelgesi, silahlar.
 - Derin analiz: harita üstünde kill/ölüm ısı haritası, utility (atılan bombalar, flaş asisti, kör süresi, bomba hasarı), nişan (isabet, sprey isabeti, kafa isabeti silaha göre, yaklaşık tepki süresi). Eski `.stats.json`'larda bu bölüm yoktur; sayfadaki "Yeniden hesapla" düğmesi ekler.
 - Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı).
+- Skor tablosunda bir oyuncuya tıklayınca onun highlight'ları listelenir; "Bu oyuncunun kliplerini kaydet" onun gözünden kaydeder.
+  "Herkesin en iyi anı" maçtaki her oyuncunun en yüksek puanlı anını sıralar. "En iyi anlarım" vitrininde oyuncuya göre süzülür.
 - İlk açılışta istatistik hesaplanır ve demonun yanına `.stats.json` olarak saklanır; sonraki açılışlar anında.
 - **Ayarlar** sayfası (`#ayarlar`): oyuncu, en düşük puan, maç başına klip, klip öncesi/sonrası süre, temiz HUD,
   montaj, klip ve demo klasörleri, araç yolları. Değerler doğrulanıp `ayarlar.json`'a yazılır (`GET/POST /api/ayarlar`).
@@ -101,7 +103,7 @@ demoyu Geri Dönüşüm Kutusu'na taşır), `arayuz.bat --otomatik` (izleyiciyi 
 | `klip.bat --kontrol` | Kayıt öncesi kontrol: araçlar, veritabanı, FACEIT/CS2 açık mı, disk |
 | `--en-iyi N` | Maç başına yalnız en iyi N an |
 | `--temizle` | Kaydı biten demoyu Geri Dönüşüm Kutusu'na taşır |
-| `--oyuncu AD` | Başka oyuncunun anları |
+| `--oyuncu AD` | Başka oyuncunun anları (ad ya da SteamID64); klip adına `p-<ad>` eklenir: `anubis_59cf10f2_R05_p-Mert06_4K_ak47.mp4` |
 | `--min-skor N` | Eşik (varsayılan 3) |
 
 Demo dosyasını `klip.bat` üzerine sürükle-bırak da çalışır.

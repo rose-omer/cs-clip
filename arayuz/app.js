@@ -82,6 +82,11 @@
     eiHarita: '',        // harita filtresi ('' = tümü)
     eiAdet: 10,          // vitrinde kaç klip (0 = hepsi)
     eiGorunen: [],       // vitrinde çizilen klipler (oynatıcı sırası)
+    // Başka oyuncunun highlight'ları (skor tablosundan seçilir) ve maçtaki herkesin en iyi anı
+    oyuncu: {},          // demo id -> seçili oyuncunun steamid'i (yoksa varsayılan oyuncu)
+    herkes: {},          // demo id -> {oyuncular} (GET /api/demo/<id>/herkes)
+    herkesHata: {},
+    eiOyuncu: '',        // vitrin oyuncu filtresi: '' = sen, '*' = herkes, yoksa klip adındaki etiket
     mjAdet: 10,
     // Montaj türü: 'sade' (yeniden kodlamadan birleştir) | 'paylasim' (TikTok/Reels/LinkedIn'e hazır video)
     mjSec: { tur: 'sade', dikey: true, yerlesim: 'bulanik', kart: true, etiket: true, kalite: '1080p', sikistirma: 'dengeli', hedefMb: '', muzik: '' },
@@ -133,6 +138,13 @@
   const esik = (d, iyi, kotu) => (d == null ? 'orta' : d >= iyi ? 'iyi' : d < kotu ? 'kotu' : 'orta');
   const benBul = (s) => (s.oyuncular || []).find((o) => o.ben)
     || (s.oyuncular || []).find((o) => String(o.steamid) === String(s.oyuncu_steamid)) || null;
+  // Seçili oyuncu (null = varsayılan oyuncu) ve onun istatistik satırı
+  const secOyuncu = (id) => S.oyuncu[id] || null;
+  const oyuncuBul = (s, sid) => (s && sid ? (s.oyuncular || []).find((o) => String(o.steamid) === String(sid)) || null : null);
+  const gosterilen = (id) => oyuncuBul(S.demo[id], secOyuncu(id)) || (S.demo[id] ? benBul(S.demo[id]) : null);
+  // Klip adındaki oyuncu etiketi (analyze.player_tag ile aynı kural): yalnız harf ve rakam
+  const oyuncuEtiket = (ad, sid = '') => [...String(ad || '')].filter((c) => /[\p{L}\p{N}]/u.test(c)).join('').slice(0, 20) || String(sid).slice(-8) || 'oyuncu';
+  const klipYol = (id, sid = secOyuncu(id)) => demoYol(id, '/klipler') + (sid ? `?oyuncu=${encodeURIComponent(sid)}` : '');
   const sure = (sn) => { sn = Math.max(0, sn || 0); return `${Math.floor(sn / 60)}:${String(Math.floor(sn % 60)).padStart(2, '0')}`; };
   const AZ_HAREKET = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const kaydir = () => (AZ_HAREKET ? 'auto' : 'smooth');
@@ -240,8 +252,63 @@
       ornekVeri = kopya(ORNEK_GOMULU);
     }
     ornekVeri.isler = {};
+    ornekVeri.oyuncuKlip = {};
+    // Vitrinde oyuncu filtresi görünsün: ilk maçta bir takım arkadaşının en iyi anı kayıtlı.
+    const d0 = ornekVeri.demolar.find((d) => d.analiz_edildi && ornekVeri.demo[d.id]);
+    const s0 = d0 && ornekVeri.demo[d0.id];
+    const ark = s0 && (s0.oyuncular || []).find((o) => !o.ben && o.takim === (s0.benim_takim ?? 0)
+      && ornekOyuncu(ornekVeri, d0.id, o.steamid).highlightlar.length);
+    if (ark) {
+      const h = ornekOyuncu(ornekVeri, d0.id, ark.steamid).highlightlar[0];
+      h.klip = `/klip/${ornekDosya(ornekVeri, d0.id, h, ark)}`;
+      d0.klip_sayisi = (d0.klip_sayisi || 0) + 1;
+    }
     return ornekVeri;
   }
+
+  // Örnek mod: başka oyuncuların highlight'ları istatistiklerinden (çoklu kill sayıları) türetilir.
+  const ORNEK_SILAH = ['ak47', 'm4a1_silencer', 'awp', 'deagle', 'galilar', 'famas', 'mp9', 'usp_silencer', 'glock'];
+  function ornekRastgele(tohum) {
+    let x = 7;
+    for (const c of String(tohum)) x = (x * 31 + c.charCodeAt(0)) >>> 0;
+    return () => { x = (Math.imul(x, 1103515245) + 12345) >>> 0; return x / 4294967296; };
+  }
+  function ornekOyuncu(v, id, sid) {
+    const s = v.demo[id];
+    const o = oyuncuBul(s, sid);
+    if (!o) return null;
+    if (o.ben) return v.klipler[id];
+    const anahtar = id + '|' + o.steamid;
+    if (v.oyuncuKlip[anahtar]) return v.oyuncuKlip[anahtar];
+    const r = ornekRastgele(anahtar);
+    const roundlar = Array.from({ length: s.round_sayisi || 20 }, (_, i) => i + 1);
+    for (let i = roundlar.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [roundlar[i], roundlar[j]] = [roundlar[j], roundlar[i]]; }
+    const coklu = { 2: 3, 3: 6, 4: 10, 5: 16 }, clutch = { 2: 4, 3: 7, 4: 10, 5: 14 };
+    const hl = [];
+    [5, 4, 3, 2].forEach((k) => {
+      for (let c = 0; c < ((o.cok_kill || {})[k] || 0) && roundlar.length; c++) {
+        const hs = Array.from({ length: k }, () => r() * 100 < (o.hs_yuzde || 40)).filter(Boolean).length;
+        const labels = [k === 5 ? 'ACE' : `${k}K`];
+        let score = coklu[k] + 0.5 * hs;
+        if (r() < 0.15) { labels.unshift(`1v${k} clutch`); score += clutch[k]; }
+        if (hs) labels.push(`${hs} HS`);
+        if (r() < 0.3) { labels.push('hızlı'); score += 1; }
+        const silah = ORNEK_SILAH[Math.floor(r() * ORNEK_SILAH.length)];
+        hl.push({ round: roundlar.pop(), score, labels, weapons: [silah], saniye: 9 + Math.round(r() * 14), klip: null });
+      }
+    });
+    hl.sort((a, b) => b.score - a.score);
+    v.oyuncuKlip[anahtar] = { highlightlar: hl };
+    return v.oyuncuKlip[anahtar];
+  }
+  function ornekDosya(v, id, h, o) {
+    const s = v.demo[id];
+    const onek = `${String(s.harita || 'demo').replace(/^de_/, '')}_${(id.split('-')[1] || id).slice(0, 8)}`;
+    const etk = o && !o.ben ? [`p-${oyuncuEtiket(o.ad, o.steamid)}`] : [];
+    return `${onek}_R${String(h.round).padStart(2, '0')}_${[...etk, ...(h.labels || [])].join('_').replace(/\s+/g, '-')}.mp4`;
+  }
+  // Vitrin/montaj oyuncu süzgeci: '' = varsayılan oyuncu (etiketsiz klipler), '*' = herkes, yoksa etiket.
+  const oyuncuSuz = (l, f) => (f === '*' ? l : l.filter((k) => String(k.oyuncu || '').toLowerCase() === String(f || '').toLowerCase()));
 
   // Kayıt işini taklit eder; satırlar klip.py'nin gerçek çıktısıyla aynı biçimde (ilerleme bundan okunur).
   function ornekIsIlerlet(id) {
@@ -252,21 +319,22 @@
     const s = v.demo[id];
     const d = v.demolar.find((x) => x.id === id);
     const ad = d ? d.ad : id;
-    const sirali = [...k.highlightlar].sort((a, b) => b.score - a.score);
+    const o = is.oyuncu ? oyuncuBul(s, is.oyuncu) : null;
+    const pk = (o && ornekOyuncu(v, id, o.steamid)) || k;
+    const sirali = [...pk.highlightlar].sort((a, b) => b.score - a.score);
     const hedef = is.enIyi > 0 ? sirali.slice(0, is.enIyi) : sirali;
     const n = hedef.length;
-    const onek = `${String(s.harita || 'demo').replace(/^de_/, '')}_${(id.split('-')[1] || id).slice(0, 8)}`;
-    const dosya = (h) => `${onek}_R${String(h.round).padStart(2, '0')}_${(h.labels || []).join('_').replace(/\s+/g, '-')}.mp4`;
+    const dosya = (h) => ornekDosya(v, id, h, o);
     const ekle = (...x) => { k.kayit.satirlar = [...k.kayit.satirlar, ...x].slice(-40); };
     const a = ++is.adim;
-    if (a === 1) ekle(`=== ${ad} ===`, `${s.harita} — ${sirali.length} highlight (skor >= 3.0)`);
+    if (a === 1) ekle(`=== ${ad} ===`, ...(o && !o.ben ? [`Oyuncu: ${o.ad} (${o.steamid}) — klip adlarına p-${oyuncuEtiket(o.ad, o.steamid)} eklenir`] : []),
+      `${s.harita} — ${sirali.length} highlight (skor >= 3.0)`);
     else if (a === 2) ekle(`[1/1] ${ad}: ${n} klip`);
     else if (a < 3 + n * 2) ekle(`  [csdm] Recording sequence ${Math.ceil((a - 2) / 2)}/${n}…`);
     else if (a < 3 + n * 3) {
       const h = hedef[a - 3 - n * 2];
       ekle(`  -> ${dosya(h)} (1 parça)`);
-      if (!h.klip) h.klip = `/klip/${dosya(h)}`;
-      if (d) d.klip_sayisi = k.highlightlar.filter((x) => x.klip).length;
+      if (!h.klip) { h.klip = `/klip/${dosya(h)}`; if (d) d.klip_sayisi = (d.klip_sayisi || 0) + 1; }
     } else {
       ekle(`${n} yeni klip: C:\\cs-clip\\klipler`);
       k.kayit.durum = 'bitti';
@@ -275,8 +343,10 @@
     }
   }
 
-  async function ornekApi(yol, { method = 'GET', body } = {}) {
+  async function ornekApi(tamYol, { method = 'GET', body } = {}) {
     const v = await ornekYukle();
+    const [yol, sorgu = ''] = tamYol.split('?');
+    const sid = new URLSearchParams(sorgu).get('oyuncu');
     await bekle(120);
     const hata = (status, mesaj) => Object.assign(new Error(mesaj), { status });
     if (yol === '/api/kontrol') return kopya(v.kontrol);
@@ -288,22 +358,22 @@
     if (yol === '/api/en-iyi/montaj') {
       if (method !== 'POST') throw hata(405, 'Geçersiz istek.');
       if (v.montajSuruyor) throw hata(409, 'Montaj zaten hazırlanıyor.');
-      const l = ornekEnIyi(v).klipler;
-      if (!l.length) throw hata(409, 'Montaj için klip yok.');
       const govde = JSON.parse(body || '{}');
+      const l = oyuncuSuz(ornekEnIyi(v).klipler, govde.oyuncu || '');
+      if (!l.length) throw hata(409, 'Montaj için klip yok.');
       const adet = Math.min(Math.max(Number(govde.adet) || 10, 1), l.length);
       v.montajSuruyor = true;
       try { await bekle(2600); } finally { v.montajSuruyor = false; }
       const secilen = l.slice(0, adet);
       v.en_iyi_montaj = {
-        klip: govde.paylasim ? `/klip/paylasim/en_iyi_${govde.dikey ? 'dikey' : 'yatay'}.mp4` : '/klip/en_iyi_montaj.mp4', adet,
+        klip: govde.paylasim ? `/klip/paylasim/en_iyi_${govde.dikey ? 'dikey' : 'yatay'}.mp4` : '/klip/en_iyi_montaj.mp4', adet, oyuncu: govde.oyuncu || null,
         boyut_mb: Math.round(secilen.reduce((a, k) => a + (k.boyut_mb || 0), 0) * 9.2) / 10,
         tarih: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19), // yerel saat
         saniye: secilen.reduce((a, k) => a + (k.saniye || 15), 0),
       };
       return kopya(v.en_iyi_montaj);
     }
-    const m = yol.match(/^\/api\/demo\/([^/]+)(\/klipler|\/kaydet|\/yeniden-hesapla)?$/);
+    const m = yol.match(/^\/api\/demo\/([^/]+)(\/klipler|\/kaydet|\/yeniden-hesapla|\/herkes)?$/);
     if (!m) throw hata(404, 'Bulunamadı.');
     const id = decodeURIComponent(m[1]);
     const demo = v.demolar.find((d) => d.id === id);
@@ -324,16 +394,34 @@
       return kopya(v.demo[id]);
     }
     const k = v.klipler[id];
+    const s = v.demo[id];
     if (m[2] === '/klipler') {
       ornekIsIlerlet(id);
-      return kopya(k);
+      const o = sid ? oyuncuBul(s, sid) : benBul(s);
+      if (sid && !o) throw hata(422, `'${sid}' bu demoda yok.`);
+      const pk = o ? ornekOyuncu(v, id, o.steamid) : k;
+      const oyuncu = { steamid: o ? o.steamid : null, ad: o ? o.ad : '?', varsayilan: !o || !!o.ben };
+      if (!oyuncu.varsayilan) oyuncu.etiket = 'p-' + oyuncuEtiket(o.ad, o.steamid);
+      return kopya({ highlightlar: pk.highlightlar, kayit: k.kayit, oyuncu });
+    }
+    if (m[2] === '/herkes') {
+      if (!v.herkesHazir) { await bekle(1400); v.herkesHazir = true; } // ilk tüm oyuncu analizini taklit et
+      const satirlar = (s.oyuncular || []).map((o) => {
+        const hl = [...(ornekOyuncu(v, id, o.steamid).highlightlar || [])].filter((h) => h.score >= 3).sort((a, b) => b.score - a.score);
+        return { steamid: o.steamid, ad: o.ad, varsayilan: !!o.ben, highlight_sayisi: hl.length, en_iyi: hl[0] || null };
+      });
+      satirlar.sort((a, b) => ((b.en_iyi ? b.en_iyi.score : -1) - (a.en_iyi ? a.en_iyi.score : -1)) || a.ad.localeCompare(b.ad, 'tr'));
+      return kopya({ oyuncular: satirlar });
     }
     if (method !== 'POST') throw hata(405, 'Geçersiz istek.');
     if (Object.keys(v.isler).length) throw hata(409, 'Başka bir kayıt sürüyor.');
-    const enIyi = Number(JSON.parse(body || '{}').en_iyi) || 0;
-    k.kayit = { durum: 'calisiyor', mesaj: 'Kayıt başladı', satirlar: [] };
-    v.isler[id] = { adim: 0, enIyi };
-    return { durum: 'calisiyor' };
+    const govde = JSON.parse(body || '{}');
+    const enIyi = Number(govde.en_iyi) || 0;
+    const oyuncu = govde.oyuncu || null;
+    if (oyuncu && !oyuncuBul(s, oyuncu)) throw hata(422, `'${oyuncu}' bu demoda yok.`);
+    k.kayit = { durum: 'calisiyor', mesaj: 'Kayıt başladı', satirlar: [], oyuncu };
+    v.isler[id] = { adim: 0, enIyi, oyuncu };
+    return { durum: 'calisiyor', oyuncu };
   }
 
   // GET /api/en-iyi taklidi: örnek demolarda kayıtlı klipler + ornek.json'daki eski maç klipleri
@@ -343,15 +431,18 @@
     v.demolar.forEach((d) => {
       const k = v.klipler[d.id], s = v.demo[d.id];
       if (!k) return;
-      (k.highlightlar || []).forEach((h) => {
+      const kaynaklar = [[k, null], ...((s && s.oyuncular) || []).filter((o) => !o.ben && v.oyuncuKlip[d.id + '|' + o.steamid])
+        .map((o) => [v.oyuncuKlip[d.id + '|' + o.steamid], o])];
+      kaynaklar.forEach(([pk, o]) => (pk.highlightlar || []).forEach((h) => {
         if (!h.klip) return;
         l.push({
           ad: decodeURIComponent(h.klip.split('/').pop()), klip: h.klip,
           harita: haritaAnahtar((s && s.harita) || d.harita), kod: (d.id.split('-')[1] || d.id).slice(0, 8),
           round: h.round, etiketler: h.labels || [], silahlar: h.weapons || [], skor: h.score, tahmini: false,
           demo: d.id, tarih: d.tarih, boyut_mb: Math.round((h.saniye || 15) * 19) / 10, saniye: h.saniye,
+          oyuncu: o ? oyuncuEtiket(o.ad, o.steamid) : null, oyuncu_ad: o ? o.ad : null,
         });
-      });
+      }));
     });
     (v.en_iyi_ek || []).forEach((x) => l.push(kopya(x)));
     l.sort((a, b) => b.skor - a.skor);
@@ -687,10 +778,11 @@
         <a href="#ozet" class="aktif">Özet</a><a href="#tablo">Skor tablosu</a><a href="#roundlar">Roundlar</a><a href="#silahlar">Silahlar</a>
         <a href="#klipler">Klipler <em id="navKlipSay">${klip ? (klip.highlightlar || []).length : '…'}</em></a>
         <a href="#isiHarita">Derin analiz</a>
+        <a href="#herkes">Herkes</a>
       </nav>
       ${ben ? spotHtml(ben, s) : '<section class="panel" id="ozet"><p class="bos-not">Bu demoda oyuncu bulunamadı (oyuncu_steamid eşleşmedi).</p></section>'}
       <section class="panel giris" id="tablo" style="--d:120ms">
-        <div class="bas"><h2><span class="bas-no"><span>02</span></span>Skor tablosu</h2><span class="bas-ek">Sıralamak için başlığa tıkla</span></div>
+        <div class="bas"><h2><span class="bas-no"><span>02</span></span>Skor tablosu</h2><span class="bas-ek">Sıralamak için başlığa, ${EN('highlight')}'ları için oyuncuya tıkla</span></div>
         <div class="tablolar" id="tablolar"></div>
         <div class="tablo-not"><span lang="en">Rating</span>: <span class="renk-iyi">≥ 1,10 iyi</span> · 0,90–1,09 ortalama · <span class="renk-kotu">&lt; 0,90 zayıf</span> &nbsp;·&nbsp; ADR ve KAST eşik renkli.</div>
       </section>
@@ -710,6 +802,7 @@
       </div>
       <section class="panel giris" id="klipler" style="--d:280ms">
         <div class="bas"><h2><span class="bas-no"><span>06</span></span><span lang="en">Highlight</span>&nbsp;klipleri</h2><span class="bas-ek" id="klipOzet"></span></div>
+        <div class="oyuncu-sec" id="oyuncuSec"></div>
         <div class="kayit">
           <div class="kayit-sol">
             <div class="kayit-satir"><span class="kayit-et">Kaydedilecek</span>
@@ -717,19 +810,26 @@
                 ${[[3, '3'], [5, '5'], [0, 'Hepsi']].map(([n, ad]) => `<button type="button" role="radio" data-n="${n}" class="${S.enIyi === n ? 'aktif' : ''}" aria-checked="${S.enIyi === n}">${n ? 'En iyi ' : ''}${ad}</button>`).join('')}
               </div></div>
             <button class="btn-kaydet" id="kaydet" type="button"><span class="rec"></span><span id="kaydetMetin">Klipleri kaydet</span> <small id="kaydetAlt"></small></button>
-            <div class="kayit-bilgi">${ORNEK_MODU ? '<b>Örnek mod:</b> kayıt taklit edilir, CS2 açılmaz. ' : ''}Kayıt CS2'yi açar ve demoyu senin gözünden oynatır; bitene kadar bilgisayarı kullanma. Başlamadan önce FACEIT ve CS2 kapalı olmalı. Klipler çıktı klasörüne (<code>klipler</code>) MP4 olarak yazılır; var olanlar atlanır.</div>
+            <div class="kayit-bilgi">${ORNEK_MODU ? '<b>Örnek mod:</b> kayıt taklit edilir, CS2 açılmaz. ' : ''}Kayıt CS2'yi açar ve demoyu <span id="kimGozu">senin</span> gözünden oynatır; bitene kadar bilgisayarı kullanma. Başlamadan önce FACEIT ve CS2 kapalı olmalı. Klipler çıktı klasörüne (<code>klipler</code>) MP4 olarak yazılır; var olanlar atlanır.</div>
           </div>
           <div class="kontrol" id="kontrolKutu"></div>
           <div class="ilerleme" id="ilerleme" hidden></div>
         </div>
         <div class="klip-izgara" id="klipIzgara"></div>
       </section>
-      ${derinHtml(s)}`;
+      ${derinHtml(s)}
+      <section class="panel giris" id="herkes" style="--d:320ms">
+        <div class="bas"><h2><span class="bas-no"><span>07</span></span>Herkesin en iyi anı</h2><span class="bas-ek" id="herkesOzet">Maçtaki her oyuncunun en yüksek puanlı anı</span></div>
+        <div id="herkesListe"></div>
+      </section>`;
     tablolariCiz();
     derinCiz();
+    oyuncuSecCiz();
     kontrolCiz();
     kayitCiz();
     klipleriCiz();
+    herkesCiz();
+    if (!S.herkes[id] && !S.herkesHata[id]) herkesYukle(id);
     sayaclar($('#ana'));
     navGozlem();
   }
@@ -858,8 +958,10 @@
           <thead><tr>${SUTUNLAR.map(([a, ad, g]) => `<th data-sira="${a}" class="${g} ${a === k ? 'sirali' + (az ? '' : ' artan') : ''}" scope="col" tabindex="0" aria-sort="${a === k ? (az ? 'descending' : 'ascending') : 'none'}">${ad}</th>`).join('')}</tr></thead>
           <tbody>${oy.map((o) => {
             const f = o.kill - o.death;
-            return `<tr class="${o.ben ? 'ben' : ''}">
-              <td><span class="oy" title="${esc(o.steamid)}"><span>${esc(o.ad)}</span>${o.ben ? '<span class="cip or">Sen</span>' : ''}</span></td>
+            const secili = String((gosterilen(S.secili) || {}).steamid) === String(o.steamid);
+            return `<tr class="${o.ben ? 'ben' : ''} secilebilir${secili ? ' secili' : ''}" data-oyuncu="${esc(o.steamid)}" tabindex="0"
+                title="${esc(o.ad)} · ${esc(o.steamid)}\nHighlight'larını göstermek için tıkla">
+              <td><span class="oy"><span>${esc(o.ad)}</span>${o.ben ? '<span class="cip or">Sen</span>' : ''}${secili && !o.ben ? '<span class="cip secildi">Seçili</span>' : ''}</span></td>
               <td class="k">${o.kill}</td><td class="soluk">${o.death}</td><td class="soluk gz-a">${o.assist}</td>
               <td class="gz-b ${f > 0 ? 'fark-a' : f < 0 ? 'fark-e' : 'soluk'}">${f > 0 ? '+' : ''}${f}</td>
               <td class="${{ iyi: 'renk-iyi', kotu: 'renk-kotu', orta: '' }[esik(o.adr, 85, 65)]}">${sayi(o.adr, 1)}</td>
@@ -947,7 +1049,7 @@
   }
 
   /* ======== klipler ======== */
-  const klipAnahtar = (id, h) => id + ':' + h.round;
+  const klipAnahtar = (id, h, sid = secOyuncu(id)) => id + ':' + (sid || '') + ':' + h.round;
   function baslikYap(h) {
     const l = h.labels || [];
     const clutch = l.find((x) => /clutch/i.test(x));
@@ -966,10 +1068,10 @@
   }
   // Klip kartının küçük resmi: CSS ile çizilmiş sahne + kill akışı (gerçek kare değil).
   function sahneHtml(s, h, i, durum) {
-    const biz = s.benim_takim ?? 0;
+    const ben = durum.oyuncu || benBul(s); // kill akışındaki oyuncu (başka oyuncu seçiliyse o)
+    const biz = durum.oyuncu && durum.oyuncu.takim != null ? durum.oyuncu.takim : (s.benim_takim ?? 0);
     const T = taraflar(s);
     const yan = takimTaraf(T, biz, h.round);
-    const ben = benBul(s);
     const rakip = (s.oyuncular || []).filter((o) => o.takim !== biz);
     const n = Math.min(killSayisi(h), 5);
     const hsN = parseInt(((h.labels || []).find((x) => /HS$/i.test(x)) || '0'), 10) || 0;
@@ -1019,19 +1121,21 @@
     const hl = siraliHl();
     if (say) say.textContent = hl.length;
     const enYuksek = Math.max(...hl.map((h) => h.score), 1);
-    const calisiyor = k.kayit && k.kayit.durum === 'calisiyor';
+    const calisiyor = k.kayit && k.kayit.durum === 'calisiyor' && kayitBuOyuncu(id);
     const hedef = new Set(calisiyor ? hl.slice(0, hedefSayisi(id)).map((h) => h.round) : []);
-    $('#klipOzet').innerHTML = `${hl.length} ${EN('highlight')} · ${hl.filter((h) => h.klip).length} klip kayıtlı`;
-    if (!hl.length) { iz.innerHTML = '<p class="bos-not">Bu maçta öne çıkan an bulunamadı.</p>'; return; }
+    const oy = gosterilen(id);
+    const baska = !!(oy && !oy.ben && secOyuncu(id));
+    $('#klipOzet').innerHTML = `${baska ? `<b>${esc(oy.ad)}</b> · ` : ''}${hl.length} ${EN('highlight')} · ${hl.filter((h) => h.klip).length} klip kayıtlı`;
+    if (!hl.length) { iz.innerHTML = `<p class="bos-not">${baska ? esc(oy.ad) + ' için' : 'Bu maçta'} öne çıkan an bulunamadı.</p>`; return; }
     iz.innerHTML = hl.map((h, i) => {
       const b = baslikYap(h);
-      const durum = { kayitli: !!h.klip, yeni: S.yeni.has(klipAnahtar(id, h)), kaydediliyor: !h.klip && hedef.has(h.round) };
+      const durum = { kayitli: !!h.klip, yeni: S.yeni.has(klipAnahtar(id, h)), kaydediliyor: !h.klip && hedef.has(h.round), oyuncu: baska ? oy : null };
       const etk = etiketHtml(h.labels);
       return `<article class="klip ${durum.kayitli ? 'kayitli' : 'kayitsiz'}${i === 0 ? ' one' : ''} giris" style="--d:${i * 60}ms">
         ${sahneHtml(s, h, i, durum)}
         <div class="kl-govde">
           <div class="kl-ust"><span class="kl-sira">#${i + 1}</span>
-            <h3 class="kl-baslik"><span class="kl-ust-et">${i === 0 ? 'Maçın anı · ' : ''}${b.ust}</span>${b.ana}</h3>
+            <h3 class="kl-baslik"><span class="kl-ust-et">${i === 0 ? (baska ? 'En iyi anı · ' : 'Maçın anı · ') : ''}${b.ust}</span>${b.ana}</h3>
             <div class="kl-puan">${sayi(h.score, 1)}<small>puan</small></div></div>
           <div class="kl-puan-bar"><i style="--p:${h.score / enYuksek * 100}%"></i></div>
           <div class="kl-etiketler">${etk}</div>
@@ -1042,16 +1146,127 @@
 
   async function klipleriYukle(id, no) {
     delete S.klipHata[id];
+    const sid = secOyuncu(id);
     try {
-      const k = await api(demoYol(id, '/klipler'));
+      const k = await api(klipYol(id, sid));
+      if (sid !== secOyuncu(id)) return; // bu arada başka oyuncu seçildi
       S.klipler[id] = k;
       if (k.kayit && k.kayit.durum === 'calisiyor') { S.aktifIs = id; yoklamaBaslat(); listeCiz(); }
     } catch (e) {
+      if (sid !== secOyuncu(id)) return;
       S.klipHata[id] = e.message;
     }
     if (no !== S.istekNo || S.secili !== id) return;
     klipleriCiz();
     kayitCiz();
+  }
+
+  /* ======== oyuncu seçimi: skor tablosu -> o oyuncunun highlight'ları (GET /klipler?oyuncu=<steamid>) ======== */
+  // Süren kayıt gösterilen oyuncunun mu? (sunucu iş durumunu demo başına tutar)
+  const kayitBuOyuncu = (id) => {
+    const k = S.klipler[id];
+    return !!(k && k.kayit) && String(k.kayit.oyuncu || '') === String(secOyuncu(id) || '');
+  };
+  function oyuncuSec(sid, kaydirarak = false) {
+    const id = S.secili;
+    const s = S.demo[id];
+    if (!id || !s) return;
+    const o = oyuncuBul(s, sid);
+    const yeni = !o || o.ben ? null : String(o.steamid);
+    if (yeni !== secOyuncu(id)) {
+      if (yeni) S.oyuncu[id] = yeni; else delete S.oyuncu[id];
+      delete S.klipler[id];
+      delete S.klipHata[id];
+      tablolariCiz();
+      oyuncuSecCiz();
+      kayitCiz();
+      klipleriCiz();
+      herkesCiz();
+      klipleriYukle(id, S.istekNo);
+    }
+    if (kaydirarak) { const kk = $('#klipler'); if (kk) kk.scrollIntoView({ behavior: kaydir() }); }
+  }
+  function oyuncuSecCiz() {
+    const kutu = $('#oyuncuSec');
+    const s = S.demo[S.secili];
+    if (!kutu || !s) return;
+    const oy = gosterilen(S.secili);
+    const ben = benBul(s);
+    const baska = !!(oy && !oy.ben && secOyuncu(S.secili));
+    const TK = takimlarOf(s);
+    const biz = s.benim_takim ?? 0;
+    const grup = (t) => `<optgroup label="${esc(TK[t].ad)} · ${t === biz ? 'Senin takımın' : 'Rakip'}">${(s.oyuncular || []).filter((o) => o.takim === t)
+      .map((o) => `<option value="${esc(o.steamid)}"${oy && String(oy.steamid) === String(o.steamid) ? ' selected' : ''}>${esc(o.ad)}${o.ben ? ' (sen)' : ''}</option>`).join('')}</optgroup>`;
+    kutu.className = 'oyuncu-sec' + (baska ? ' baska' : '');
+    kutu.innerHTML = `<span class="kayit-et">Oyuncu</span>
+      <label class="sr" for="oyuncuListe">Kimin ${EN('highlight')}'ları gösterilsin</label>
+      <select id="oyuncuListe" class="oyuncu-liste">${grup(biz)}${grup(1 - biz)}</select>
+      ${baska ? `<span class="oyuncu-not">${esc(oy.ad)} oyuncusunun anları · klip adlarına <code>p-${esc(oyuncuEtiket(oy.ad, oy.steamid))}</code> eklenir</span>
+        <button class="btn-ikincil" type="button" data-oyuncu-sec="${esc(ben ? ben.steamid : '')}">${ikon('i-back')}Kendi anlarım</button>`
+        : `<span class="oyuncu-not">Başka bir oyuncunun anları için skor tablosunda adına tıkla.</span>`}`;
+  }
+
+  /* ======== herkesin en iyi anı: GET /api/demo/<id>/herkes ======== */
+  async function herkesYukle(id) {
+    if (S.herkesYukleniyor === id) return;
+    S.herkesYukleniyor = id;
+    delete S.herkesHata[id];
+    try {
+      S.herkes[id] = await api(demoYol(id, '/herkes'));
+    } catch (e) {
+      S.herkesHata[id] = e.status === 404
+        ? 'Sunucu bu isteği tanımıyor (HTTP 404). Arayüz sunucusunu kapatıp arayuz.bat ile yeniden başlat.' : e.message;
+    } finally {
+      if (S.herkesYukleniyor === id) S.herkesYukleniyor = null;
+    }
+    if (S.secili === id && S.gorunum === 'mac') herkesCiz();
+  }
+  function herkesCiz() {
+    const kutu = $('#herkesListe');
+    const id = S.secili, s = S.demo[id];
+    if (!kutu || !s) return;
+    const veri = S.herkes[id];
+    if (!veri) {
+      kutu.innerHTML = S.herkesHata[id]
+        ? `<div class="kontrol sorun"><div class="kontrol-bas">${ikon('i-alert')}Oyuncuların anları alınamadı</div><ul><li>${esc(S.herkesHata[id])}</li></ul>
+            <button class="btn-ikincil" type="button" data-herkes-tekrar>${ikon('i-refresh')}Tekrar dene</button></div>`
+        : `<p class="bos-not yukleniyor-not">Tüm oyuncuların ${EN('highlight')}'ları çıkarılıyor… (ilk seferde birkaç saniye)</p>`;
+      return;
+    }
+    const l = veri.oyuncular || [];
+    const T = taraflar(s);
+    const enYuksek = Math.max(...l.map((x) => (x.en_iyi ? x.en_iyi.score : 0)), 1);
+    const secili = String((gosterilen(id) || {}).steamid);
+    $('#herkesOzet').textContent = `${l.filter((x) => x.en_iyi).length} / ${l.length} oyuncunun öne çıkan anı var`;
+    kutu.innerHTML = `<ol class="herkes">${l.map((x, i) => {
+      const o = oyuncuBul(s, x.steamid) || { ad: x.ad, takim: null };
+      const h = x.en_iyi;
+      const yan = o.takim != null ? takimTaraf(T, o.takim, h ? h.round : 1) : null;
+      const b = h ? baslikYap(h) : null;
+      return `<li class="hk${x.varsayilan ? ' ben' : ''}${String(x.steamid) === secili ? ' secili' : ''}${h ? '' : ' yok'}"${yan ? ` style="--c:${tarafRenk(yan)}"` : ''}>
+        <span class="hk-sira">${h ? i + 1 : '–'}</span>
+        <span class="hk-oy"><b>${esc(x.ad)}</b>${x.varsayilan ? '<span class="cip or">Sen</span>' : ''}<small>${o.takim == null ? '' : x.varsayilan ? '' : o.takim === (s.benim_takim ?? 0) ? 'Takım arkadaşı' : 'Rakip'}</small></span>
+        ${h ? `<span class="hk-an"><span class="hk-baslik">${b.ana}<small>${b.ust}</small></span><span class="kl-etiketler">${etiketHtml(h.labels)}</span></span>
+          <span class="hk-puan">${sayi(h.score, 1)}<small>puan</small><i style="--p:${sinirla(h.score / enYuksek * 100, 3, 100)}%"></i></span>`
+          : `<span class="hk-an bos-not">Öne çıkan an yok</span><span class="hk-puan"></span>`}
+        <span class="hk-dugme">
+          ${h && h.klip ? `<button class="ikon-dugme" type="button" data-herkes-oynat="${i}" aria-label="${esc(x.ad)}: en iyi anı oynat" title="Klibi oynat">${ikon('i-play')}</button>` : ''}
+          <button class="btn-ikincil" type="button" data-oyuncu-sec="${esc(x.steamid)}"${x.highlight_sayisi ? '' : ' disabled'}>${x.highlight_sayisi || 0} an →</button>
+        </span></li>`;
+    }).join('')}</ol>`;
+  }
+  function herkesOynat(i, kaynak) {
+    const s = S.demo[S.secili];
+    const x = ((S.herkes[S.secili] || {}).oyuncular || [])[i];
+    if (!s || !x || !x.en_iyi || !x.en_iyi.klip) return;
+    const h = x.en_iyi;
+    const o = oyuncuBul(s, x.steamid);
+    const b = baslikYap(h);
+    pencereAc({
+      klip: h.klip, rozet: `R${h.round}`, saniye: h.saniye,
+      baslik: `${esc(x.ad)} · ${b.ana} · <span lang="en">${esc(haritaAd(s.harita) || '')}</span>`,
+      sahne: ORNEK_MODU ? sahneHtml(s, h, i, { kayitli: false, oyuncu: o && !o.ben ? o : null }) : '',
+    }, kaynak);
   }
 
   /* ======== kayıt: POST /api/demo/<id>/kaydet + iş durumu yoklaması ======== */
@@ -1099,14 +1314,21 @@
     const calisiyor = !!(b && b.durum === 'calisiyor');
     const hl = siraliHl();
     const n = S.enIyi ? Math.min(S.enIyi, hl.length) : hl.length;
+    const oy = gosterilen(id);
+    const baska = !!(oy && !oy.ben && secOyuncu(id));
     btn.disabled = !k || calisiyor || S.kayitBasliyor;
-    btn.title = S.aktifIs && S.aktifIs !== id ? 'Başka bir demonun kaydı sürüyor.' : '';
+    btn.title = S.aktifIs && S.aktifIs !== id ? 'Başka bir demonun kaydı sürüyor.' : baska ? `${oy.ad} oyuncusunun anları onun gözünden kaydedilir.` : '';
+    btn.classList.toggle('baska', baska);
+    const goz = $('#kimGozu');
+    if (goz) goz.textContent = baska ? `${oy.ad} oyuncusunun` : 'senin';
     $('#kaydetMetin').textContent = !k ? (S.klipHata[id] ? 'Klipler alınamadı' : 'Yükleniyor…')
-      : S.kayitBasliyor ? 'Başlatılıyor…' : calisiyor ? 'Kayıt sürüyor…' : 'Klipleri kaydet';
+      : S.kayitBasliyor ? 'Başlatılıyor…' : calisiyor ? 'Kayıt sürüyor…' : baska ? 'Bu oyuncunun kliplerini kaydet' : 'Klipleri kaydet';
     $('#kaydetAlt').textContent = !k || calisiyor || S.kayitBasliyor ? '' : `(${S.enIyi ? 'en iyi ' + n : 'hepsi · ' + n})`;
     $$('.secim button').forEach((x) => { x.disabled = calisiyor; });
     const il = $('#ilerleme');
     if (!b) { il.hidden = true; il.innerHTML = ''; return; }
+    const isOy = k && k.kayit && k.kayit.oyuncu ? oyuncuBul(S.demo[id], k.kayit.oyuncu) : null;
+    if (isOy && !isOy.ben) b.mesaj = `${isOy.ad} · ${b.mesaj}`;
     const eski = $('#gunluk', il);
     const altta = !eski || eski.scrollHeight - eski.scrollTop - eski.clientHeight < 30;
     il.hidden = false;
@@ -1131,13 +1353,15 @@
     const hl = siraliHl();
     if (!hl.length) { bildir('Kaydedilecek highlight yok.', 'hata'); return; }
     const enIyi = S.enIyi;
+    const sid = secOyuncu(id);
     S.kayitBasliyor = true;
     kayitCiz();
     try {
-      const sonuc = await api(demoYol(id, '/kaydet'), { method: 'POST', body: JSON.stringify({ en_iyi: enIyi }) });
+      const govde = sid ? { en_iyi: enIyi, oyuncu: sid } : { en_iyi: enIyi }; // varsayılan oyuncu: eski gövde
+      const sonuc = await api(demoYol(id, '/kaydet'), { method: 'POST', body: JSON.stringify(govde) });
       S.kayitHedef[id] = enIyi;
       delete S.ilerleme[id];
-      k.kayit = { durum: (sonuc && sonuc.durum) || 'calisiyor', mesaj: 'Kayıt başladı', satirlar: [] };
+      k.kayit = { durum: (sonuc && sonuc.durum) || 'calisiyor', mesaj: 'Kayıt başladı', satirlar: [], oyuncu: sid };
       S.aktifIs = id;
       S.yoklamaHata = null;
       bildir(ORNEK_MODU ? 'Örnek mod: kayıt taklit ediliyor.' : 'Kayıt başladı. CS2 açılacak; bitene kadar bilgisayarı kullanma.');
@@ -1168,11 +1392,14 @@
       const id = S.aktifIs;
       if (!id) return;
       try {
-        const yeni = await api(demoYol(id, '/klipler'));
+        const sid = secOyuncu(id);
+        const yeni = await api(klipYol(id, sid));
         const eski = S.klipler[id];
-        const once = new Map(((eski && eski.highlightlar) || []).map((h) => [h.round, h.klip]));
-        (yeni.highlightlar || []).forEach((h) => { if (h.klip && !once.get(h.round) && eski) S.yeni.add(klipAnahtar(id, h)); });
-        S.klipler[id] = yeni;
+        if (sid === secOyuncu(id)) { // yanıt gelene kadar oyuncu değiştiyse listeyi karıştırma
+          const once = new Map(((eski && eski.highlightlar) || []).map((h) => [h.round, h.klip]));
+          (yeni.highlightlar || []).forEach((h) => { if (h.klip && !once.get(h.round) && eski) S.yeni.add(klipAnahtar(id, h, sid)); });
+          S.klipler[id] = yeni;
+        } else if (eski) eski.kayit = yeni.kayit;
         S.yoklamaHata = null;
         hataSay = 0;
         const bitti = !yeni.kayit || yeni.kayit.durum !== 'calisiyor';
@@ -1182,6 +1409,8 @@
           delete S.ilerleme[id];
           const s = S.demo[id];
           const ad = haritaAd(s && s.harita) || 'Demo';
+          delete S.herkes[id]; // klip bağlantıları değişti
+          if (S.secili === id && S.gorunum === 'mac') herkesYukle(id);
           if (yeni.kayit && yeni.kayit.durum === 'hata') bildir(`${ad}: kayıt başarısız — ${yeni.kayit.mesaj || 'bilinmeyen hata'}`, 'hata');
           else {
             const b = kayitBilgi(id);
@@ -1210,10 +1439,12 @@
     if (!h || !h.klip) return;
     const s = S.demo[S.secili];
     const b = baslikYap(h);
+    const oy = gosterilen(S.secili);
+    const baska = oy && !oy.ben && secOyuncu(S.secili) ? oy : null;
     pencereAc({
       klip: h.klip, rozet: `R${h.round}`, saniye: h.saniye,
-      baslik: `${b.ana} · <span lang="en">${esc(haritaAd(s.harita) || '')}</span>`,
-      sahne: ORNEK_MODU ? sahneHtml(s, h, i, { kayitli: false }) : '',
+      baslik: `${baska ? esc(baska.ad) + ' · ' : ''}${b.ana} · <span lang="en">${esc(haritaAd(s.harita) || '')}</span>`,
+      sahne: ORNEK_MODU ? sahneHtml(s, h, i, { kayitli: false, oyuncu: baska }) : '',
     }, kaynak);
   }
   // o: {klip, src?, rozet, baslik (HTML), saniye, sahne (örnek mod HTML), ek (alt satıra HTML)}
@@ -1388,6 +1619,34 @@
     bosCiz();
   }
 
+  // Vitrindeki başka oyuncular (klip adında p-<etiket> olanlar): [{etiket, ad, n}]
+  function eiOyuncular() {
+    const m = new Map();
+    (S.ei ? S.ei.klipler : []).forEach((k) => {
+      if (!k.oyuncu) return;
+      const a = String(k.oyuncu).toLowerCase();
+      const x = m.get(a) || { etiket: k.oyuncu, ad: k.oyuncu_ad || k.oyuncu, n: 0 };
+      x.n++;
+      m.set(a, x);
+    });
+    return [...m.values()].sort((a, b) => b.n - a.n || a.ad.localeCompare(b.ad, 'tr'));
+  }
+  // Süzgeç geçersizse düzeltir: yalnız başkalarının klipleri varsa "Herkes"e geçer.
+  function eiOyuncuDuzelt() {
+    if (!S.ei) return;
+    const l = S.ei.klipler;
+    if (S.eiOyuncu && S.eiOyuncu !== '*' && !oyuncuSuz(l, S.eiOyuncu).length) S.eiOyuncu = '';
+    if (!S.eiOyuncuElle && S.eiOyuncu === '' && !oyuncuSuz(l, '').length && l.length) S.eiOyuncu = '*';
+  }
+  const eiListe = () => (S.ei ? oyuncuSuz(S.ei.klipler, S.eiOyuncu) : []);
+  const eiOyuncuAd = (f) => (f === '*' ? 'herkes' : f ? ((eiOyuncular().find((x) => x.etiket.toLowerCase() === String(f).toLowerCase()) || {}).ad || f) : 'sen');
+  function vitrinOyuncu(k) {
+    if (!k.oyuncu) return null;
+    const s = k.demo && S.demo[k.demo];
+    const o = s && (s.oyuncular || []).find((x) => oyuncuEtiket(x.ad, x.steamid).toLowerCase() === String(k.oyuncu).toLowerCase());
+    return o || { ad: k.oyuncu_ad || k.oyuncu, takim: 0 };
+  }
+
   function enIyiCiz() {
     const ana = $('#ana');
     if (!S.ei) {
@@ -1400,7 +1659,10 @@
             <p>Tüm maçlardaki klipler toplanıyor…</p></div></div>`;
       return;
     }
-    const l = S.ei.klipler;
+    eiOyuncuDuzelt();
+    const l = eiListe();
+    const kimin = S.eiOyuncu === '*' ? 'Herkesin en iyi <span>anları</span>'
+      : S.eiOyuncu ? `${esc(eiOyuncuAd(S.eiOyuncu))} · en iyi <span>anları</span>` : 'En iyi <span>anlarım</span>';
     const haritalar = new Set(l.map((k) => haritaAnahtar(k.harita)).filter(Boolean));
     const maclar = new Set(l.map((k) => k.demo || k.kod || k.ad));
     if (S.eiHarita && !haritalar.has(S.eiHarita)) S.eiHarita = '';
@@ -1411,7 +1673,7 @@
         <div class="ei-zemin"></div><div class="sb-filigran" lang="en">Highlights</div>
         <div class="sb-ust"><span class="sb-etiket">Kariyer vitrini</span><span>Tüm maçlar</span>${son ? `<span class="ayir"></span><span>Son klip ${esc(tarihYaz(son))}</span>` : ''}</div>
         <div class="ei-bant-ic">
-          <div class="ei-bas-metin"><h1 class="ei-baslik">En iyi <span>anlarım</span></h1>
+          <div class="ei-bas-metin"><h1 class="ei-baslik">${kimin}</h1>
             <p class="ei-aciklama">Kaydettiğin bütün klipler tek listede, puanı en yüksekten başlayarak. Bir karta tıkla, klip oynasın.</p></div>
           <div class="ei-sayilar">
             <div><b data-say="${l.length}">${l.length}</b>klip</div><div><b data-say="${maclar.size}">${maclar.size}</b>maç</div>
@@ -1451,12 +1713,16 @@
   function vitrinCiz() {
     const iz = $('#eiIzgara');
     if (!iz || !S.ei) return;
-    const tum = S.ei.klipler;
+    const tum = eiListe();
+    const oyuncular = eiOyuncular();
     const say = {};
     tum.forEach((k) => { const h = haritaAnahtar(k.harita); if (h) say[h] = (say[h] || 0) + 1; });
     const sirali = Object.keys(say).sort((a, b) => say[b] - say[a] || a.localeCompare(b));
     const cip = (h, ad, n) => `<button type="button" class="ei-cip${S.eiHarita === h ? ' aktif' : ''}" data-ei-harita="${esc(h)}" aria-pressed="${S.eiHarita === h}"${h ? ` style="${haritaStil(h)}"` : ''}>${h ? '<i></i>' : ''}<span${h ? ' lang="en"' : ''}>${esc(ad)}</span><em>${n}</em></button>`;
-    $('#eiFiltre').innerHTML = tum.length ? `
+    const oyCip = (f, ad, n) => `<button type="button" class="ei-cip ei-oy${S.eiOyuncu === f ? ' aktif' : ''}" data-ei-oyuncu="${esc(f)}" aria-pressed="${S.eiOyuncu === f}"><span>${esc(ad)}</span><em>${n}</em></button>`;
+    const oyHtml = oyuncular.length ? `<div class="ei-cipler ei-oyuncular" role="group" aria-label="Oyuncu filtresi"><span class="kayit-et">Oyuncu</span>
+      ${oyCip('', 'Sen', oyuncuSuz(S.ei.klipler, '').length)}${oyuncular.map((x) => oyCip(x.etiket, x.ad, x.n)).join('')}${oyCip('*', 'Herkes', S.ei.klipler.length)}</div>` : '';
+    $('#eiFiltre').innerHTML = (tum.length || oyHtml) ? `${oyHtml}
       <div class="ei-cipler" role="group" aria-label="Harita filtresi">${cip('', 'Tümü', tum.length)}${sirali.map((h) => cip(h, haritaAd(h), say[h])).join('')}</div>
       <div class="secim" role="radiogroup" aria-label="Kaç klip gösterilsin">${[[10, 'En iyi 10'], [20, 'En iyi 20'], [0, 'Hepsi']].map(([n, ad]) =>
         `<button type="button" role="radio" data-ei-adet="${n}" class="${S.eiAdet === n ? 'aktif' : ''}" aria-checked="${S.eiAdet === n}">${ad}</button>`).join('')}</div>` : '';
@@ -1465,7 +1731,7 @@
     S.eiGorunen = g;
     $('#eiOzet').innerHTML = tum.length ? `${g.length} / ${f.length} klip${S.eiHarita ? ` · <span lang="en">${esc(haritaAd(S.eiHarita))}</span>` : ''}` : '';
     if (!tum.length) {
-      iz.innerHTML = `<div class="ei-bos"><span class="birak-ikon">${ikon('i-film')}</span><div><strong>Henüz klip yok</strong>
+      iz.innerHTML = `<div class="ei-bos"><span class="birak-ikon">${ikon('i-film')}</span><div><strong>${S.ei.klipler.length ? 'Bu oyuncunun klibi yok' : 'Henüz klip yok'}</strong>
         <p>Bir maçı aç ve “Klipleri kaydet” ile klip üret. Kaydedilen bütün klipler burada puana göre sıralanır.</p>
         <button class="btn-ikincil" type="button" data-maca-don>${ikon('i-back')}Maçlara dön</button></div></div>`;
       return;
@@ -1481,10 +1747,10 @@
     const tahmin = k.tahmini ? ' data-tip="Tahmini puan\nDosya adından tahmin edildi (highlight verisi yok)."' : '';
     const silah = (k.silahlar || []).map((w) => esc(silahAd(w))).join(' · ');
     return `<article class="klip kayitli ei-klip${i === 0 ? ' one' : ''} giris" style="--d:${Math.min(i, 12) * 45}ms" data-ei="${i}">
-      ${sahneHtml(vitrinDemo(k), h, i, { kayitli: true, oynatAt: `data-ei-oynat="${i}"` })}
+      ${sahneHtml(vitrinDemo(k), h, i, { kayitli: true, oynatAt: `data-ei-oynat="${i}"`, oyuncu: vitrinOyuncu(k) })}
       <div class="kl-govde">
         <div class="kl-ust"><span class="kl-sira${i < 3 ? ' podyum' : ''}">#${i + 1}</span>
-          <h3 class="kl-baslik"><span class="kl-ust-et">${i === 0 ? 'En iyi anın · ' : ''}<span lang="en">${esc(ad)}</span> · ${b.ust}</span>${b.ana}</h3>
+          <h3 class="kl-baslik"><span class="kl-ust-et">${i === 0 && !k.oyuncu ? 'En iyi anın · ' : ''}${k.oyuncu ? `<b class="ei-oyuncu">${esc(k.oyuncu_ad || k.oyuncu)}</b> · ` : ''}<span lang="en">${esc(ad)}</span> · ${b.ust}</span>${b.ana}</h3>
           <div class="kl-puan${k.tahmini ? ' tahmini' : ''}"${tahmin}>${k.tahmini ? '~' : ''}${sayi(k.skor, 1)}<small>${k.tahmini ? 'tahmini' : 'puan'}</small></div></div>
         <div class="kl-puan-bar"><i style="--p:${sinirla((k.skor || 0) / enYuksek * 100, 2, 100)}%"></i></div>
         <div class="kl-etiketler">${etiketHtml(h.labels) || '<span class="etk hs">Etiket yok</span>'}</div>
@@ -1502,8 +1768,8 @@
     const b = baslikYap(h);
     pencereAc({
       klip: k.klip, rozet: `#${i + 1} · R${k.round}`, saniye: ORNEK_MODU ? (k.saniye || 15) : k.saniye,
-      baslik: `${b.ana} · <span lang="en">${esc(haritaAd(k.harita) || '')}</span>`,
-      sahne: ORNEK_MODU ? sahneHtml(vitrinDemo(k), { ...h, saniye: k.saniye || 15 }, i, { kayitli: false }) : '',
+      baslik: `${k.oyuncu ? esc(k.oyuncu_ad || k.oyuncu) + ' · ' : ''}${b.ana} · <span lang="en">${esc(haritaAd(k.harita) || '')}</span>`,
+      sahne: ORNEK_MODU ? sahneHtml(vitrinDemo(k), { ...h, saniye: k.saniye || 15 }, i, { kayitli: false, oyuncu: vitrinOyuncu(k) }) : '',
       ek: k.demo ? ` · <a href="#${encodeURIComponent(k.demo)}">Maça git →</a>` : '',
     }, kaynak);
   }
@@ -1511,7 +1777,8 @@
   function montajCiz() {
     const kutu = $('#montajKutu');
     if (!kutu || !S.ei) return;
-    const n = S.ei.klipler.length;
+    const n = eiListe().length;
+    const kimin = S.eiOyuncu ? ` (${esc(eiOyuncuAd(S.eiOyuncu))})` : '';
     const mj = S.ei.montaj;
     const sur = S.montajSuruyor;
     const adetN = Math.min(S.mjAdet, n);
@@ -1528,8 +1795,8 @@
         ${sur ? `<div class="mj-bekle"><div class="il-bar belirsiz"><i></i></div><div class="analiz-adim" id="montajSure">${sn} sn · ${S.mjSec.tur === 'paylasim' ? 'video kodlanıyor' : 'klipler birleştiriliyor'}</div></div>` : ''}
         ${S.montajHata && !sur ? `<div class="mj-hata" role="alert">${ikon('i-alert')}<span>${esc(S.montajHata)}</span></div>` : ''}
         <div class="kayit-bilgi">${ORNEK_MODU ? '<b>Örnek mod:</b> montaj taklit edilir, dosya yazılmaz. ' : ''}${S.mjSec.tur === 'paylasim'
-          ? `Puanı en yüksek ${adetN || ''} klip ${S.mjSec.dikey ? 'dikey 9:16' : 'yatay 16:9'} olarak yeniden kodlanır${S.mjSec.kart ? ', başa harita/skor kartı' : ''}${S.mjSec.etiket ? ', köşeye kill etiketi' : ''} eklenir (<code>klipler/paylasim/en_iyi_${S.mjSec.dikey ? 'dikey' : 'yatay'}.mp4</code>). Klip başına 10-30 saniye sürebilir; klipler değişmez.`
-          : `Puanı en yüksek ${adetN || ''} klip sırayla tek bir MP4'te birleştirilir (<code>klipler/en_iyi_montaj.mp4</code>); var olan montajın üzerine yazılır. Birkaç saniye ile bir dakika sürebilir.`}${n && S.mjAdet > n ? ` Şu an yalnız ${n} klip var.` : ''}</div>
+          ? `Puanı en yüksek ${adetN || ''} klip${kimin} ${S.mjSec.dikey ? 'dikey 9:16' : 'yatay 16:9'} olarak yeniden kodlanır${S.mjSec.kart ? ', başa harita/skor kartı' : ''}${S.mjSec.etiket ? ', köşeye kill etiketi' : ''} eklenir (<code>klipler/paylasim/en_iyi_${S.mjSec.dikey ? 'dikey' : 'yatay'}.mp4</code>). Klip başına 10-30 saniye sürebilir; klipler değişmez.`
+          : `Puanı en yüksek ${adetN || ''} klip${kimin} sırayla tek bir MP4'te birleştirilir (<code>klipler/en_iyi_montaj.mp4</code>); var olan montajın üzerine yazılır. Birkaç saniye ile bir dakika sürebilir.`}${n && S.mjAdet > n ? ` Şu an yalnız ${n} klip var.` : ''}</div>
       </div>
       <div class="mj-kart${mj ? '' : ' bos'}${mj && S.montajYeni ? ' yeni' : ''}">${mj ? montajKartHtml(mj) : `
         <span class="birak-ikon">${ikon('i-film')}</span><strong>Henüz montaj yok</strong>
@@ -1565,7 +1832,7 @@
     return g;
   }
   function montajKartHtml(mj) {
-    const serit = S.ei.klipler.slice(0, Math.max(1, Math.min(mj.adet || 1, 20)))
+    const serit = oyuncuSuz(S.ei.klipler, mj.oyuncu || '').slice(0, Math.max(1, Math.min(mj.adet || 1, 20)))
       .map((k) => `<i style="${haritaStil(k.harita)}"></i>`).join('');
     let dosya = '';
     try { dosya = decodeURIComponent(String(mj.klip).split('/').pop()); } catch { dosya = String(mj.klip); }
@@ -1573,7 +1840,7 @@
         <span class="mj-serit">${serit}</span><span class="kl-round">Montaj</span>
         <span class="kl-oynat">${ikon('i-play', '')}</span></button>
       <div class="mj-bilgi">
-        <div class="mj-ad">En iyi ${esc(mj.adet ?? '?')} an<small>${esc(dosya)}</small></div>
+        <div class="mj-ad">En iyi ${esc(mj.adet ?? '?')} an${mj.oyuncu ? ` · ${esc(eiOyuncuAd(mj.oyuncu))}` : ''}<small>${esc(dosya)}</small></div>
         <div class="mj-say"><div>Klip<b>${esc(mj.adet ?? '–')}</b></div><div>Boyut<b>${sayi(mj.boyut_mb, 1)} <small>MB</small></b></div><div>Tarih<b>${esc(tarihYaz(mj.tarih))}</b></div></div>
         <div class="ei-dugmeler"><button class="btn-ikincil" type="button" data-mj-oynat>${ikon('i-play')}Oynat</button>
           ${ORNEK_MODU ? '' : `<a class="btn-ikincil" href="${esc(montajSrc(mj))}" target="_blank" rel="noopener">${ikon('i-full')}Yeni sekmede aç</a>`}</div>
@@ -1584,7 +1851,7 @@
   function montajOynat(kaynak) {
     const mj = S.ei && S.ei.montaj;
     if (!mj) return;
-    const ilk = S.ei.klipler[0];
+    const ilk = oyuncuSuz(S.ei.klipler, mj.oyuncu || '')[0] || S.ei.klipler[0];
     pencereAc({
       klip: mj.klip, src: montajSrc(mj), rozet: `${mj.adet ?? '?'} klip`, baslik: 'En iyi anlar · montaj',
       saniye: ORNEK_MODU ? (mj.saniye || (mj.adet || 1) * 15) : 0,
@@ -1592,8 +1859,9 @@
     }, kaynak);
   }
   async function montajYap() {
-    if (S.montajSuruyor || !S.ei || !S.ei.klipler.length) return;
+    if (S.montajSuruyor || !S.ei || !eiListe().length) return;
     const adet = S.mjAdet;
+    const oyuncu = S.eiOyuncu;
     S.montajSuruyor = true;
     S.montajHata = null;
     S.montajBas = Date.now();
@@ -1603,7 +1871,7 @@
       if (el) el.textContent = `${Math.floor((Date.now() - S.montajBas) / 1000)} sn · ${S.mjSec.tur === 'paylasim' ? 'video kodlanıyor' : 'klipler birleştiriliyor'}`;
     }, 500);
     try {
-      const r = await api('/api/en-iyi/montaj', { method: 'POST', body: JSON.stringify(mjGovde(adet)) });
+      const r = await api('/api/en-iyi/montaj', { method: 'POST', body: JSON.stringify(oyuncu ? { ...mjGovde(adet), oyuncu } : mjGovde(adet)) });
       if (!r || !r.klip) throw new Error('Sunucudan geçersiz yanıt geldi.');
       if (S.ei) S.ei.montaj = r;
       S.montajYeni = true;
@@ -1706,7 +1974,7 @@
         linkler.forEach((a) => a.classList.toggle('aktif', a.getAttribute('href') === '#' + g.target.id));
       });
     }, { rootMargin: '-45% 0px -50% 0px' });
-    ['ozet', 'tablo', 'roundlar', 'silahlar', 'klipler', 'isiHarita'].forEach((x) => { const el = document.getElementById(x); if (el) gozlem.observe(el); });
+    ['ozet', 'tablo', 'roundlar', 'silahlar', 'klipler', 'isiHarita', 'herkes'].forEach((x) => { const el = document.getElementById(x); if (el) gozlem.observe(el); });
   }
 
   /* ======== Kariyer (#kariyer): GET /api/kariyer — analiz edilmiş tüm maçlar ======== */
@@ -2550,6 +2818,8 @@
     if (t.closest('[data-ei-yenile]')) { enIyiYukle(true); return; }
     const eiGit = t.closest('[data-ei-git]');
     if (eiGit) { const h = document.getElementById(eiGit.dataset.eiGit); if (h) h.scrollIntoView({ behavior: kaydir() }); return; }
+    const eiOy = t.closest('[data-ei-oyuncu]');
+    if (eiOy) { S.eiOyuncu = eiOy.dataset.eiOyuncu; S.eiOyuncuElle = true; enIyiCiz(); return; }
     const eiH = t.closest('[data-ei-harita]');
     if (eiH) { S.eiHarita = eiH.dataset.eiHarita; vitrinCiz(); return; }
     const eiA = t.closest('[data-ei-adet]');
@@ -2581,6 +2851,13 @@
     if (t.closest('.marka')) { e.preventDefault(); scrollTo({ top: 0, behavior: kaydir() }); return; }
     const th = t.closest('th[data-sira]');
     if (th) { siralaDegis(th); return; }
+    const oySec = t.closest('[data-oyuncu-sec]');
+    if (oySec) { if (!oySec.disabled) oyuncuSec(oySec.dataset.oyuncuSec, true); return; }
+    const satir = t.closest('#tablolar tr[data-oyuncu]');
+    if (satir) { oyuncuSec(satir.dataset.oyuncu, true); return; }
+    const hkO = t.closest('[data-herkes-oynat]');
+    if (hkO) { herkesOynat(+hkO.dataset.herkesOynat, hkO); return; }
+    if (t.closest('[data-herkes-tekrar]')) { herkesYukle(S.secili); herkesCiz(); return; }
     const n = t.closest('.secim button[data-n]');
     if (n && !n.disabled) { S.enIyi = +n.dataset.n; $$('.secim button').forEach((b) => { b.classList.toggle('aktif', b === n); b.setAttribute('aria-checked', String(b === n)); }); kayitCiz(); return; }
     if (t.closest('#kaydet')) { kaydet(); return; }
@@ -2629,6 +2906,10 @@
     }
     if ((e.key === 'Enter' || e.key === ' ') && e.target === $('#birak')) { e.preventDefault(); $('#dosyaSec').click(); return; }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('th[data-sira]')) { e.preventDefault(); siralaDegis(e.target); }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('#tablolar tr[data-oyuncu]')) { e.preventDefault(); oyuncuSec(e.target.dataset.oyuncu, true); }
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'oyuncuListe') oyuncuSec(e.target.value);
   });
   // Montaj seçeneklerindeki metin kutuları: yalnız durumu güncelle (yeniden çizmek odağı kaçırır).
   document.addEventListener('input', (e) => {
