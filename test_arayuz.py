@@ -22,6 +22,7 @@ def app(tmp_path, monkeypatch):
     cfg = {**DEFAULTS, "demo_klasorleri": [str(demos)], "cikti_klasoru": str(clips)}
     a = arayuz.App(cfg)
     a.out_dir = clips
+    a.kilit, a.oto_dosya = tmp_path / "kayit.kilit", tmp_path / "otomatik.json"
     return a, demos, clips
 
 
@@ -249,3 +250,23 @@ def test_settings_bad_json(server, tmp_path):
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(req)
     assert e.value.code == 400
+
+
+def test_otomatik_kuyruk_ozeti(server):
+    url, (a, demos, _) = server
+    with urllib.request.urlopen(url + "/api/otomatik") as r:
+        assert json.loads(r.read())["calisiyor"] is False
+    (demos / "1-aaaa1111-x-1-1.dem").write_bytes(b"d")
+    arayuz.otomatik.Kuyruk(a.oto_dosya).ekle(demos / "1-aaaa1111-x-1-1.dem")
+    with urllib.request.urlopen(url + "/api/otomatik") as r:
+        data = json.loads(r.read())
+    assert data["bekleyen"] == 1 and data["kuyruk"][0]["id"] == "1-aaaa1111-x-1-1"
+
+
+def test_kuyruk_kaydederken_arayuz_kayit_baslatmaz(server, monkeypatch):
+    url, (a, demos, _) = server
+    (demos / "1-aaaa1111-x-1-1.dem").write_bytes(b"d")
+    monkeypatch.setattr(arayuz, "preflight", lambda *a, **k: pytest.fail("ön kontrole gelmemeli"))
+    with arayuz.otomatik.kayit_kilidi(a.kilit):
+        code, data = post_error(url + "/api/demo/1-aaaa1111-x-1-1/kaydet", {"en_iyi": 3})
+    assert code == 409 and "Otomatik kuyruk" in data["hata"]

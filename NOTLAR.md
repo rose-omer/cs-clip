@@ -56,7 +56,7 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
 
 ### Sıradaki adımlar
 2. `olcum.ps1`'i düzelt, aşamaları ölç; CSDM `--recording-system HLAE` dene (TGA'sız kayıt).
-3. Downloads izleme modu (yeni demo gelince otomatik kayıt).
+3. ~~Downloads izleme modu~~ → `otomatik.py` (aşağıda).
 4. Steam'deki `-netconport 2121 -windowed -noborder` başlatma seçeneği artık gereksiz; istenirse kaldırılır.
 
 ## 2026-11-08 — arayüz ve 4 yeni demo
@@ -128,3 +128,20 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
 - Arayüz: `#ayarlar` sayfası, `GET/POST /api/ayarlar` (`config.validate`, `config.save_config`). Oyuncu ya da
   `once_sn`/`sonra_sn` değişince demoların `.highlights.json` (oyuncu değiştiyse `.stats.json` da) önbelleği silinir.
   Arayüzden başlatılan kayıt artık arayüzün `--ayarlar` dosyasını kullanıyor (önceden hep `ayarlar.json`).
+
+## 2026-11-08 — tam otomatik akış (`otomatik.py`, `faceit.py`)
+- İzleyici klasörleri yoklar (30 sn; ek paket yok). Yarım indirmeler (`.crdownload`, `.part`) uzantıdan, yazılmakta olan
+  dosya 15 sn değişmeme şartıyla elenir. Aynı maçın `.dem`/`.dem.zst` hâli ve `.onarilmis.dem` kopyası tek maç sayılır.
+  İlk çalışmada mevcut demolar "görüldü" sayılır (eski birikim kaydedilmesin).
+- Kuyruk `otomatik.json`'da (görülenler, sıra, işçi nabzı, son 40 satır). İşçi önce yalnız süreç listesine bakar
+  (`cs2.exe`, `faceitclient.exe`, `faceitservice.exe`); hepsi kapalıysa `otomatik_bekle_sn` bekler, sonra tam
+  `preflight`, sonra bir kez daha süreç listesi, sonra `klip.py`. `klip.py` "Kayıt başlayamaz" derse demo hatalı
+  sayılmaz, sıraya geri döner. Yarıda ölen işçinin "kaydediliyor" işi bir sonraki çalışmada yeniden sıraya girer.
+- `kayit.kilit`: süreçler arası kilit (Windows `msvcrt.locking`); süreç ölünce işletim sistemi bırakır. Arayüzün
+  "Klipleri kaydet"i de bunu tutar; kuyruk kaydederken arayüz 409 döner.
+- FACEIT: Data API v4 (`/players?nickname=`, `/players/{id}/history?game=cs2`, `/matches/{id}` → `demo_url`), sonra
+  Downloads API (`POST /download/v2/demos/download-url`) ile imzalı link; 401/403/404 alırsa `demo_url` doğrudan denenir.
+  Anahtar yalnız `ayarlar.json`'dan okunur, CDN'e gönderilmez. İndirilen maç kimlikleri saklanır: `--temizle` ile silinen
+  demo yeniden inmez.
+- **Denenmedi**: gerçek FACEIT API çağrısı (anahtar yok; testler sahte ağla), gerçek kayıt kuyruktan (testlerde sahte
+  `klip.py`). Downloads API'nin kişisel anahtarla çalışıp çalışmadığı belirsiz; çalışmazsa hata mesajı izin istemeyi söyler.

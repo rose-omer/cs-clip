@@ -59,5 +59,5 @@ Birden çok demo: hepsini bir klasöre koyup `klip.bat <klasör> --en-iyi 3 --te
 
 - FACEIT açıkken kayıt yapılamaz (CSDM CS2'yi `-insecure` başlatır).
 - Kayıt gerçek zamanlıdır ve kareler önce diske yazılır: 40 sn'lik görüntü ≈ 2 dk. Ayrıntı: NOTLAR.md.
-- CSDM'in FACEIT'ten otomatik demo indirmesi kapalı; demolar elle indirilir.
+- CSDM'in FACEIT'ten otomatik demo indirmesi kapalı; demolar elle ya da `otomatik.py faceit` (FACEIT API anahtarıyla) indirilir.
 - Clutch, takımların 5 kişi olduğunu varsayar. Clutch'ı yalnız bombayla kazandıysan klip çıkmaz.
