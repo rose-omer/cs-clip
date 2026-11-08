@@ -89,6 +89,7 @@
     montajYeni: false,
   };
   const EN_IYI = 'en-iyi';
+  const AYARLAR = 'ayarlar';
 
   /* ======== yardımcılar ======== */
   const $ = (s, k = document) => k.querySelector(s);
@@ -184,6 +185,7 @@
     if (!yanit.ok) {
       const h = new Error((veri && veri.hata) || `Sunucu hatası (HTTP ${yanit.status}).`);
       h.status = yanit.status;
+      h.veri = veri; // ör. /api/ayarlar alan hataları: veri.alanlar
       throw h;
     }
     if (veri === null && metin) throw new Error('Sunucudan geçersiz yanıt geldi.');
@@ -544,6 +546,7 @@
     try { id = decodeURIComponent(location.hash.slice(1)); } catch { /* bozuk adres */ }
     if (!$('#modal').hidden) oynaticiKapat(); // oynatıcıdaki "Maça git" bağlantısı
     if (id === EN_IYI) enIyiAc();
+    else if (id === AYARLAR) ayarlarAc();
     else if (id) demoAc(id);
   }
 
@@ -1581,6 +1584,30 @@
     if (!hataVar) setTimeout(() => { if (!S.yukleniyor) $('#yukleme').hidden = true; }, 1500);
     if (sonId) demoSec(sonId); // yeni demo açılır; analiz edilmemişse sunucu analiz eder
   }
+
+  /* ======== Ayarlar (#ayarlar): sayfayı arayuz/ayarlar.js çizer ======== */
+  function ayarlarAc() {
+    S.istekNo++; // süren demo yüklemeleri #ana'yı artık çizmesin
+    S.gorunum = AYARLAR;
+    S.secili = null;
+    menuAc(false);
+    ipucuGizle();
+    if (gozlem) { gozlem.disconnect(); gozlem = null; }
+    scrollTo({ top: 0, behavior: kaydir() });
+    listeCiz();
+    gezinCiz();
+    if (window.csklipAyarlar) window.csklipAyarlar.ac($('#ana'));
+    else hataCiz('Ayarlar açılamadı', 'ayarlar.js yüklenemedi; sayfayı yenile.', null);
+  }
+  // ayarlar.js'in kullandığı yardımcılar; kayıttan sonra demo listesi ve kontrol yenilenir.
+  window.csklip = {
+    api, bildir, esc, ikon, ornek: ORNEK_MODU,
+    ayarlarKaydedildi(sonuc) {
+      if (sonuc && sonuc.yeniden_analiz) { S.demo = {}; S.klipler = {}; S.ei = null; }
+      demolariYenile();
+      kontrolYenile();
+    },
+  };
 
   /* ======== bölüm gezinme vurgusu ======== */
   let gozlem = null;

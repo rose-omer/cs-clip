@@ -1,0 +1,47 @@
+/* cs-klip — Ayarlar sayfası (#ayarlar). Renkler ve paneller style.css'ten. */
+.ay-form{max-width:980px}
+.ay-ust{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;margin:6px 0 20px}
+.ay-baslik{margin:0;font:800 44px/1 var(--f-disp);letter-spacing:.03em;text-transform:uppercase}
+.ay-aciklama{margin:8px 0 0;color:var(--muted);max-width:62ch}
+.ay-aciklama code{font:12.5px var(--f-mono);color:var(--text);word-break:break-all}
+
+.ay-izgara{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 22px}
+.ay-alan{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ay-alan.genis{grid-column:1 / -1}
+.ay-etiket{display:flex;align-items:center;gap:8px;font:700 13px/1 var(--f-disp);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ay-etiket em{font-style:normal;font-size:10px;letter-spacing:.06em;padding:2px 5px;background:var(--or-a);color:var(--or2);border:1px solid rgba(255,107,26,.35)}
+.ay-alan input[type=text],.ay-alan input[type=number],.ay-alan textarea{
+  width:100%;min-height:40px;padding:9px 12px;background:var(--bg2);border:1px solid var(--line2);border-radius:0;
+  font:15px/1.35 var(--f-body);color:var(--text);transition:border-color .2s,background .2s}
+.ay-alan textarea{resize:vertical;font:13.5px/1.5 var(--f-mono)}
+.ay-alan input::placeholder,.ay-alan textarea::placeholder{color:var(--dim)}
+.ay-alan input:hover,.ay-alan textarea:hover{border-color:var(--muted)}
+.ay-alan input:focus,.ay-alan textarea:focus{outline:none;border-color:var(--or);background:var(--panel)}
+.ay-alan.hatali input,.ay-alan.hatali textarea{border-color:var(--kotu);background:var(--kotu-a)}
+.ay-ipucu{font-size:12.5px;color:var(--dim);line-height:1.35}
+.ay-hata{font-size:13px;color:var(--kotu);font-weight:600}
+
+/* açık/kapalı anahtarı */
+.ay-anahtar{display:inline-flex;align-items:center;gap:10px;min-height:40px;cursor:pointer;align-self:flex-start}
+.ay-anahtar input{position:absolute;opacity:0;width:1px;height:1px}
+.ay-anahtar-yol{position:relative;width:46px;height:24px;background:var(--panel3);border:1px solid var(--line2);transition:background .2s,border-color .2s}
+.ay-anahtar-yol::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;background:var(--muted);transition:transform .2s var(--ease),background .2s}
+.ay-anahtar input:checked + .ay-anahtar-yol{background:var(--or);border-color:var(--or)}
+.ay-anahtar input:checked + .ay-anahtar-yol::after{transform:translateX(22px);background:#160900}
+.ay-anahtar input:focus-visible + .ay-anahtar-yol{outline:2px solid var(--or);outline-offset:2px}
+.ay-anahtar-yazi{font:700 13px/1 var(--f-disp);letter-spacing:.1em;text-transform:uppercase}
+
+.ay-gelismis summary{cursor:pointer;color:var(--muted);font:600 13px/1 var(--f-disp);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+.ay-gelismis[open] summary{margin-bottom:16px}
+.ay-gelismis summary:hover{color:var(--text)}
+
+.ay-dugmeler{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 30px}
+.ay-dugmeler .btn-kaydet{width:auto;min-width:220px;padding:0 28px}
+.ay-dugmeler .btn-kaydet:disabled{opacity:.7;cursor:progress}
+.ay-dugmeler .btn-ikincil{align-self:center}
+
+@media (max-width:720px){
+  .ay-baslik{font-size:34px}
+  .ay-izgara{grid-template-columns:minmax(0,1fr)}
+  .ay-dugmeler .btn-kaydet{width:100%}
+}

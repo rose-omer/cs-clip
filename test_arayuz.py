@@ -11,6 +11,8 @@ from config import DEFAULTS
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "ev"))  # gerçek İndirilenler'e hiç dokunulmasın
+    monkeypatch.setenv("HOME", str(tmp_path / "ev"))
     demos, clips, web = tmp_path / "indirilenler", tmp_path / "klipler", tmp_path / "web"
     for d in (demos, clips, web):
         d.mkdir()
@@ -191,3 +193,59 @@ def test_best_montage_busy(server, fake_ffmpeg):
     finally:
         a.montage_lock.release()
     assert code == 409 and data["hata"] == "Montaj sürüyor."
+
+
+def send_settings(url, data):
+    req = urllib.request.Request(url, data=json.dumps(data).encode(), method="POST",
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+def test_settings_get_and_save(server, tmp_path):
+    url, (a, demos, _) = server
+    a.settings_path = tmp_path / "ayarlar.json"
+    with urllib.request.urlopen(url + "/api/ayarlar") as r:
+        got = json.loads(r.read())
+    assert got["ayarlar"]["oyuncu"] == DEFAULTS["oyuncu"] and got["varsayilan"] == DEFAULTS
+
+    # oyuncu değişince o demonun önbellekleri silinir, diğer dosyalar kalır
+    (demos / "1-aaaa1111-x-1-1.dem").write_bytes(b"d")
+    for ext in (".highlights.json", ".stats.json"):
+        (demos / f"1-aaaa1111-x-1-1{ext}").write_text("[]", encoding="utf-8")
+    new_out = tmp_path / "yeni_klipler"
+    status, body = send_settings(url + "/api/ayarlar", {"oyuncu": "baskasi", "once_sn": 4, "cikti_klasoru": str(new_out)})
+    assert status == 200, body
+    assert body["ayarlar"]["oyuncu"] == "baskasi" and body["yeniden_analiz"] == 1
+    assert json.loads(a.settings_path.read_text(encoding="utf-8"))["once_sn"] == 4
+    assert a.cfg["oyuncu"] == "baskasi" and a.out_dir == new_out.resolve()
+    assert not (demos / "1-aaaa1111-x-1-1.stats.json").exists()
+    assert (demos / "1-aaaa1111-x-1-1.dem").exists()
+
+    # yalnız montaj değişince önbelleğe dokunulmaz
+    (demos / "1-aaaa1111-x-1-1.highlights.json").write_text("[]", encoding="utf-8")
+    status, body = send_settings(url + "/api/ayarlar", {"montaj": False})
+    assert status == 200 and body["yeniden_analiz"] == 0
+    assert (demos / "1-aaaa1111-x-1-1.highlights.json").exists()
+
+
+def test_settings_rejects_invalid_without_writing(server, tmp_path):
+    url, (a, _, _) = server
+    a.settings_path = tmp_path / "ayarlar.json"
+    status, body = send_settings(url + "/api/ayarlar", {"oyuncu": "", "min_skor": -1, "yok": 1})
+    assert status == 400
+    assert set(body["alanlar"]) == {"oyuncu", "min_skor", "yok"}
+    assert not a.settings_path.exists()
+    assert a.cfg["oyuncu"] == DEFAULTS["oyuncu"]
+
+
+def test_settings_bad_json(server, tmp_path):
+    url, (a, _, _) = server
+    a.settings_path = tmp_path / "ayarlar.json"
+    req = urllib.request.Request(url + "/api/ayarlar", data=b"{bozuk", method="POST")
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(req)
+    assert e.value.code == 400

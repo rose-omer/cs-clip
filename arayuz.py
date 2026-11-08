@@ -23,7 +23,7 @@ from urllib.parse import unquote, urlparse
 import eniyi
 import render
 from analyze import analyze, save_json
-from config import load_config
+from config import DEFAULTS, load_config, save_config, validate
 from demofile import find_csgo_dir, open_demo
 from klip import DEMO_SUFFIXES, clip_prefix
 from onarim import is_repaired_copy
@@ -50,15 +50,62 @@ def match_code(did: str) -> str:
     return clip_prefix("x", Path(did + ".dem")).split("_", 1)[1]
 
 
+# Değişince önbellekteki analizler eskir: highlight listesi bu ayarlara, istatistikler oyuncuya bağlı.
+HIGHLIGHT_KEYS = ("oyuncu", "once_sn", "sonra_sn")
+
+
 class App:
-    def __init__(self, cfg: dict):
-        self.cfg = cfg
-        self.out_dir = (ROOT / cfg["cikti_klasoru"]).resolve()
-        self.folders = [Path(f) for f in cfg["demo_klasorleri"]] or [Path.home() / "Downloads", UPLOADS]
+    def __init__(self, cfg: dict, settings_path: Path | None = None):
+        self.settings_path = Path(settings_path) if settings_path else ROOT / "ayarlar.json"
+        self.folders: list[Path] = []
+        self.apply_config(cfg)
         self.locks: dict[str, threading.Lock] = {}
         self.lock = threading.Lock()
         self.job = {"durum": "bos", "mesaj": "", "satirlar": [], "demo": None}
         self.montage_lock = threading.Lock()
+
+    def apply_config(self, cfg: dict) -> None:
+        self.cfg = cfg
+        self.out_dir = (ROOT / cfg["cikti_klasoru"]).resolve()
+        uploaded = UPLOADS in self.folders
+        self.folders = [Path(f) for f in cfg["demo_klasorleri"]] or [Path.home() / "Downloads", UPLOADS]
+        if uploaded and UPLOADS not in self.folders:
+            self.folders.append(UPLOADS)
+
+    # --- ayarlar ---
+    def settings(self) -> dict:
+        return {"ayarlar": self.cfg, "varsayilan": DEFAULTS, "dosya": str(self.settings_path)}
+
+    def save_settings(self, data) -> dict:
+        clean, errors = validate(data)
+        if errors:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "Bazı ayarlar geçersiz: " + ", ".join(errors), alanlar=errors)
+        with self.lock:
+            old = self.cfg
+            try:
+                save_config(self.settings_path, clean)
+            except (OSError, ValueError, SystemExit) as e:
+                raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, f"Ayarlar kaydedilemedi: {e}")
+            # Çalışan ayarlar üzerine yalnız değişenler: dosyada olmayan alanlar (ör. demo klasörleri) kaybolmasın.
+            cfg = {**old, **clean}
+            self.apply_config(cfg)
+        stale = [k for k in HIGHLIGHT_KEYS if old[k] != cfg[k]]
+        cleared = self.clear_caches(stats=old["oyuncu"] != cfg["oyuncu"]) if stale else 0
+        return {**self.settings(), "yeniden_analiz": cleared}
+
+    def clear_caches(self, stats: bool) -> int:
+        """Eskiyen analiz önbelleklerini siler; demo açılınca yeniden hesaplanır. Silinen demo sayısı."""
+        n = 0
+        for did, p in self.demos().items():
+            files = [p.parent / f"{did}.highlights.json"] + ([p.parent / f"{did}.stats.json"] if stats else [])
+            hit = False
+            with self.demo_lock(did):
+                for f in files:
+                    if f.is_file():
+                        f.unlink(missing_ok=True)
+                        hit = True
+            n += hit
+        return n
 
     # --- demolar ---
     def demos(self) -> dict[str, Path]:
@@ -211,7 +258,8 @@ class App:
 
     def _record(self, path: Path, best: int) -> None:
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
-        cmd = [sys.executable, str(ROOT / "klip.py"), str(path), "--en-iyi", str(best)]
+        cmd = [sys.executable, str(ROOT / "klip.py"), str(path), "--en-iyi", str(best),
+               "--ayarlar", str(self.settings_path)]
         try:
             with subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
                                   text=True, encoding="utf-8", errors="replace",
@@ -250,9 +298,10 @@ class App:
 
 
 class ApiError(Exception):
-    def __init__(self, status: HTTPStatus, message: str):
+    def __init__(self, status: HTTPStatus, message: str, **extra):
         super().__init__(message)
         self.status = status
+        self.extra = extra
 
 
 def make_handler(app: App):
@@ -275,7 +324,7 @@ def make_handler(app: App):
             try:
                 self.send_json(fn())
             except ApiError as e:
-                self.send_json({"hata": str(e)}, e.status)
+                self.send_json({"hata": str(e), **e.extra}, e.status)
             except SystemExit as e:  # analyze/stats kullanıcıya dönük hataları SystemExit ile verir
                 self.send_json({"hata": str(e)}, HTTPStatus.UNPROCESSABLE_ENTITY)
             except Exception as e:  # sunucu çökmesin, hata sayfada görünsün
@@ -291,6 +340,8 @@ def make_handler(app: App):
                 return self.handle_api(check)
             if path == "/api/demolar":
                 return self.handle_api(app.list_demos)
+            if path == "/api/ayarlar":
+                return self.handle_api(app.settings)
             if path == "/api/en-iyi":
                 return self.handle_api(app.best)
             if m := re.fullmatch(r"/api/demo/([^/]+)/klipler", path):
@@ -316,6 +367,14 @@ def make_handler(app: App):
                         raise ApiError(HTTPStatus.BAD_REQUEST, "en_iyi sayı olmalı.")
                     return app.start_recording(m.group(1), best)
                 return self.handle_api(start)
+            if path == "/api/ayarlar":
+                def save():
+                    try:
+                        data = json.loads(body or b"{}")
+                    except ValueError:
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Geçersiz JSON.")
+                    return app.save_settings(data)
+                return self.handle_api(save)
             if path == "/api/en-iyi/montaj":
                 def montage():
                     try:
@@ -382,7 +441,7 @@ def main() -> None:
 
     mimetypes.add_type("video/mp4", ".mp4")
     mimetypes.add_type("text/javascript", ".js")
-    app = App(load_config(args.ayarlar))
+    app = App(load_config(args.ayarlar), args.ayarlar)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(app))
     url = f"http://127.0.0.1:{args.port}/"
     print(f"Arayüz: {url}  (kapatmak için Ctrl+C)")
