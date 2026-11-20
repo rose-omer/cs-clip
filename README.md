@@ -6,11 +6,28 @@ CS2 maç demolarından senin en iyi anlarını bulan, puanlayan ve CS2'nin için
 bir araç. Yanında Leetify benzeri yerel bir maç analizi arayüzü var: rating, ADR, KAST, skor tablosu, round geçmişi,
 silah dağılımı ve kliplerin kendisi.
 
+## Ekran görüntüleri
+
 ![Maç özeti](docs/1-mac-ozeti.png)
 
 | Skor tablosu | Round ve silah analizi | Highlight klipleri |
 |---|---|---|
 | ![Skor tablosu](docs/2-skor-tablosu.png) | ![Roundlar ve silahlar](docs/3-roundlar-silahlar.png) | ![Klipler](docs/4-klipler.png) |
+
+| En iyi anlarım | Kariyer | Ayarlar |
+|---|---|---|
+| ![En iyi anlarım](docs/5-en-iyi-anlar.png) | ![Kariyer](docs/6-kariyer.png) | ![Ayarlar](docs/7-ayarlar.png) |
+
+## Kullanım
+
+![Kullanım: maç seçme, sekmeler, en iyi anlar ve kariyer](docs/kullanim.gif)
+
+1. `arayuz.bat` ile arayüzü açın. Soldan bir demo seçin ya da **Demo yükle** ile `.dem` dosyası bırakın.
+2. Üstteki sekmelerle özet, skor tablosu, roundlar, silahlar ve kliplere geçin.
+3. **Klipleri kaydet** CS2 içinde `.mp4` klip çeker.
+4. **En iyi anlarım** bütün klipleri puana göre sıralar; **Kariyer** maçlar arası gelişimi gösterir.
+
+Görseller örnek veriyle alındı: `arayuz/index.html?ornek=1`.
 
 ## Nasıl çalışır
 
