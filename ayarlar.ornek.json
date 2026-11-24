@@ -16,5 +16,10 @@
   "otomatik_bekle_sn": 120,
   "faceit_api_anahtari": "",
   "faceit_kullanici": "",
-  "kayit_sistemi": "CS"
+  "kayit_sistemi": "CS",
+  "canli_klasoru": "kayitlar",
+  "canli_port": 8770,
+  "canli_fps": 60,
+  "canli_kodlayici": "h264_nvenc",
+  "canli_ses": ""
 }

@@ -110,6 +110,7 @@ svg.i{width:16px;height:16px;flex:none;fill:currentColor}
 .cubuk{height:4px;background:var(--line);margin-top:8px;overflow:hidden}
 .cubuk i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--or-d),var(--or));transition:width .15s linear}
 .yukleme-alt{font-size:11.5px;color:var(--dim);margin-top:6px}
+.yukleme-iptal{margin-top:8px;height:28px}
 
 /* ---------- kenar: demo listesi ---------- */
 .kenar-bas{display:flex;align-items:center;justify-content:space-between;margin:22px 2px 10px;font:700 13px/1 var(--f-disp);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
@@ -459,6 +460,7 @@ td.soluk{color:var(--muted)}
 .il-mesaj{font:600 16px/1.2 var(--f-disp);letter-spacing:.04em;min-width:0}
 .il-yuzde{margin-left:auto;font:800 30px/1 var(--f-disp);font-variant-numeric:tabular-nums;color:var(--or)}
 .ilerleme.bitti .il-yuzde{color:var(--iyi)}
+.il-durdur{align-self:center;height:36px;padding:0 14px}
 .il-bar{position:relative;height:8px;background:var(--line);margin:12px 0 14px;overflow:hidden}
 .il-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:repeating-linear-gradient(115deg,var(--or) 0 10px,var(--or2) 10px 20px);background-size:200% 100%;transition:width .5s var(--ease);animation:serit 1s linear infinite}
 .ilerleme.bitti .il-bar i{background:var(--iyi);animation:none}
@@ -560,6 +562,13 @@ td.soluk{color:var(--muted)}
 .kl-puan-bar{height:3px;background:var(--line)}
 .kl-puan-bar i{display:block;height:100%;width:var(--p);background:linear-gradient(90deg,var(--or-d),var(--or));transform-origin:left;animation:buyu .8s .2s var(--ease) both}
 .kl-etiketler{display:flex;flex-wrap:wrap;gap:5px}
+.etk.ozel{background:transparent;border:1px dashed var(--line2);color:var(--orta)}
+.kl-dokum{margin-top:8px;font-size:12px;color:var(--muted)}
+.kl-dokum summary{cursor:pointer;width:max-content}
+.kl-dokum summary:focus-visible{outline:2px solid var(--or);outline-offset:2px}
+.kl-dokum ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:2px}
+.kl-dokum li{display:flex;justify-content:space-between;gap:12px}
+.kl-dokum b{color:var(--text);font-variant-numeric:tabular-nums}
 .etk{display:inline-flex;align-items:center;height:22px;padding:0 8px;background:var(--panel3);color:var(--orta);font:700 12px/1 var(--f-disp);letter-spacing:.08em;text-transform:uppercase}
 .etk.clutch{background:var(--or);color:#160900}
 .etk.kill{background:#2b3346;color:#fff;box-shadow:inset 2px 0 0 var(--or)}

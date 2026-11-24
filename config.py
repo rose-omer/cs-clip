@@ -23,6 +23,11 @@ DEFAULTS = {
     "faceit_api_anahtari": "",  # FACEIT Data API anahtarı (developers.faceit.com); otomatik.py faceit
     "faceit_kullanici": "",  # FACEIT kullanıcı adı; boşsa "oyuncu"
     "kayit_sistemi": "CS",  # CSDM kayıt sistemi: "CS" ya da "HLAE"; HLAE kuruluysa CS takılınca son çare olarak denenir
+    "canli_klasoru": "kayitlar",  # canlı kayıt: ham maç kayıtları ve oturum dosyaları
+    "canli_port": 8770,  # CS2 GSI'nin durum gönderdiği yerel port (yalnız 127.0.0.1)
+    "canli_fps": 60,  # kayıt kare hızı; oyun FPS'inden bağımsız
+    "canli_kodlayici": "h264_nvenc",  # h264_nvenc | hevc_nvenc | av1_nvenc
+    "canli_ses": "",  # DirectShow ses cihazı (ör. "Stereo Mix (Realtek(R) Audio)"); boşsa sessiz
 }
 
 # OBS/netcon dönemi ayarları: eski ayarlar.json bozulmasın diye yok sayılır.
@@ -47,7 +52,19 @@ NUMBERS = {  # alan: (en az, en çok, yalnız tam sayı mı)
     "mac_basi_en_fazla": (0, 50, True),
     "once_sn": (0, 30, False),
     "sonra_sn": (0, 30, False),
+    "otomatik_bekle_sn": (0, 3600, True),
+    "canli_port": (1024, 65535, True),
+    "canli_fps": (10, 240, True),
 }
+CANLI_KODLAYICILAR = ("h264_nvenc", "hevc_nvenc", "av1_nvenc")
+CHOICES = {  # alan: olabilecek değerler
+    "kayit_cozunurluk": ("", "1080p", "1440p"),
+    "kayit_sistemi": ("CS", "HLAE"),
+    "canli_kodlayici": CANLI_KODLAYICILAR,
+}
+TEXTS = {"faceit_api_anahtari": 200, "faceit_kullanici": 64, "canli_ses": 200}  # alan: en çok uzunluk
+CRF_RANGE = (14, 35)  # kayit_crf: 0 (CSDM'in ayarı) ya da bu aralık
+FOLDERS = {"cikti_klasoru": "Klip klasörü", "canli_klasoru": "Canlı kayıt klasörü"}  # boş olamaz, oluşturulabilir
 BOOLS = ("temiz_hud", "montaj")
 DIRS = ("csgo_klasoru", "pg_veri_klasoru")  # boş olabilir; doluysa var olmalı
 FILES = ("csdm_yolu", "ffmpeg_yolu")
@@ -97,10 +114,31 @@ def validate(data, check_paths: bool = True) -> tuple[dict, dict]:
                 errors[key] = "Açık ya da kapalı (true/false) olmalı."
             else:
                 clean[key] = value
-        elif key == "cikti_klasoru":
+        elif key in CHOICES:
+            if value not in CHOICES[key]:
+                errors[key] = "Şunlardan biri olmalı: " + ", ".join(repr(c) if c == "" else c for c in CHOICES[key])
+            else:
+                clean[key] = value
+        elif key in TEXTS:
+            if not isinstance(value, str):
+                errors[key] = "Metin olmalı."
+            elif len(value.strip()) > TEXTS[key]:
+                errors[key] = f"En fazla {TEXTS[key]} karakter."
+            else:
+                # Ses cihazı adı tırnakla yapıştırılabilir ("Stereo Mix (…)"); ffmpeg'e tırnaksız gider.
+                clean[key] = clean_path(value) if key == "canli_ses" else value.strip()
+        elif key == "kayit_crf":
+            if isinstance(value, str) and value.strip().isdigit():
+                value = int(value)
+            if isinstance(value, bool) or not isinstance(value, int) or not (
+                    value == 0 or CRF_RANGE[0] <= value <= CRF_RANGE[1]):
+                errors[key] = f"0 (CSDM'in ayarı) ya da {CRF_RANGE[0]}-{CRF_RANGE[1]} arasında tam sayı olmalı."
+            else:
+                clean[key] = value
+        elif key in FOLDERS:
             path = clean_path(value) if isinstance(value, str) else ""
             if not path:
-                errors[key] = "Klip klasörü boş olamaz."
+                errors[key] = f"{FOLDERS[key]} boş olamaz."
             elif check_paths and Path(path).exists() and not Path(path).is_dir():
                 errors[key] = "Bu yol bir dosya, klasör değil."
             else:
@@ -131,6 +169,8 @@ def validate(data, check_paths: bool = True) -> tuple[dict, dict]:
                 errors[key] = "Dosya bulunamadı."
             else:
                 clean[key] = path
+        else:  # yeni ayar eklenip burada unutulursa sessizce atılmasın
+            errors[key] = "Bu ayar arayüzden değiştirilemez."
     return clean, errors
 
 

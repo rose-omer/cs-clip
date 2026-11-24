@@ -10,14 +10,16 @@
 .ay-alan.genis{grid-column:1 / -1}
 .ay-etiket{display:flex;align-items:center;gap:8px;font:700 13px/1 var(--f-disp);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .ay-etiket em{font-style:normal;font-size:10px;letter-spacing:.06em;padding:2px 5px;background:var(--or-a);color:var(--or2);border:1px solid rgba(255,107,26,.35)}
-.ay-alan input[type=text],.ay-alan input[type=number],.ay-alan textarea{
+.ay-alan input[type=text],.ay-alan input[type=number],.ay-alan input[type=password],.ay-alan textarea,.ay-alan select{
   width:100%;min-height:40px;padding:9px 12px;background:var(--bg2);border:1px solid var(--line2);border-radius:0;
   font:15px/1.35 var(--f-body);color:var(--text);transition:border-color .2s,background .2s}
+.ay-alan select{color-scheme:dark}
 .ay-alan textarea{resize:vertical;font:13.5px/1.5 var(--f-mono)}
 .ay-alan input::placeholder,.ay-alan textarea::placeholder{color:var(--dim)}
-.ay-alan input:hover,.ay-alan textarea:hover{border-color:var(--muted)}
-.ay-alan input:focus,.ay-alan textarea:focus{outline:none;border-color:var(--or);background:var(--panel)}
-.ay-alan.hatali input,.ay-alan.hatali textarea{border-color:var(--kotu);background:var(--kotu-a)}
+.ay-alan input:hover,.ay-alan textarea:hover,.ay-alan select:hover{border-color:var(--muted)}
+.ay-alan input:focus,.ay-alan textarea:focus,.ay-alan select:focus{outline:none;border-color:var(--or);background:var(--panel)}
+.ay-alan input:focus-visible,.ay-alan textarea:focus-visible,.ay-alan select:focus-visible{box-shadow:0 0 0 2px var(--or)}
+.ay-alan.hatali input,.ay-alan.hatali textarea,.ay-alan.hatali select{border-color:var(--kotu);background:var(--kotu-a)}
 .ay-ipucu{font-size:12.5px;color:var(--dim);line-height:1.35}
 .ay-hata{font-size:13px;color:var(--kotu);font-weight:600}
 

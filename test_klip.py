@@ -1,3 +1,5 @@
+import pytest
+
 from pathlib import Path
 
 from demofile import demo_files
@@ -25,3 +27,33 @@ def test_demo_files_lists_dem_archive_and_json(tmp_path):
     for name in ["m.dem", "m.dem.zst", "m.highlights.json", "baska.dem"]:
         (tmp_path / name).write_bytes(b"x")
     assert sorted(p.name for p in demo_files(tmp_path / "m.dem")) == ["m.dem", "m.dem.zst", "m.highlights.json"]
+
+
+def test_klip_dogrudan_calisinca_kayit_kilidini_tutar(tmp_path, monkeypatch):
+    """klip.bat ile kayıt: ortak kilit alınır (canlı kayıt demo oynatmayı maç sanmasın), doluysa başlamaz."""
+    import otomatik
+
+    import klip
+
+    monkeypatch.setattr(otomatik, "KILIT", tmp_path / "kayit.kilit")
+    monkeypatch.delenv(otomatik.KILIT_TUTULUYOR, raising=False)
+    with otomatik.kayit_kilidi(otomatik.KILIT):  # arayüz ya da kuyruk kaydediyor
+        with pytest.raises(SystemExit):
+            klip.hold_recording_lock()
+    klip.hold_recording_lock()
+    try:
+        assert otomatik.kilit_dolu(otomatik.KILIT)
+    finally:
+        klip._lock_stack.close()
+    assert not otomatik.kilit_dolu(otomatik.KILIT)
+
+
+def test_klip_kilidi_tutan_ebeveynden_calisinca_kilit_almaz(tmp_path, monkeypatch):
+    import otomatik
+
+    import klip
+
+    monkeypatch.setattr(otomatik, "KILIT", tmp_path / "kayit.kilit")
+    monkeypatch.setenv(otomatik.KILIT_TUTULUYOR, "1")
+    with otomatik.kayit_kilidi(otomatik.KILIT):
+        klip.hold_recording_lock()  # hata yok: kilit ebeveynde

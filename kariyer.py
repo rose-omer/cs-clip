@@ -1,7 +1,7 @@
 """Kariyer: analiz edilmiş maçların (<demo>.stats.json) oyuncu satırları.
 
 Yalnız var olan stats.json dosyaları okunur; analiz başlatılmaz, dosyalar değiştirilmez.
-Grafikler, ortalamalar ve harita özetleri arayüzde (arayuz/app.js) bu satırlardan hesaplanır.
+Grafikler, ortalamalar ve harita özetleri arayüzde (arayuz/js/kariyer.js) bu satırlardan hesaplanır.
 """
 
 import json

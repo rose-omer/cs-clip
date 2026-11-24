@@ -9,6 +9,8 @@ Kayıt CS Demo Manager ile yapılır: her demo için CS2 bir kez açılır.
 """
 
 import argparse
+import contextlib
+import os
 import sys
 from pathlib import Path
 
@@ -63,6 +65,26 @@ def csdm_analyze(tools: dict, demo: Path) -> str | None:
     print("  CSDM'e ekleniyor…")
     code, lines = run_streaming(analyze_args(tools["csdm"], demo), tools["env"])
     return (lines[-1] if lines else f"çıkış kodu {code}") if code else None
+
+
+_lock_stack = contextlib.ExitStack()
+
+
+def hold_recording_lock() -> None:
+    """Ortak kayıt kilidini süreç bitene kadar tutar (klip.bat ile doğrudan çalıştırılınca).
+
+    Canlı kayıt bu kilide bakar: tutulmazsa CSDM'in oynattığı demo GSI'de maç sanılıp ekran kaydı açılır.
+    Arayüz ve otomatik kuyruk kilidi zaten tutup klip.py'yi KILIT_TUTULUYOR ile başlatır.
+    """
+    import otomatik  # otomatik klip'i içe aktarır: döngü olmasın diye burada
+
+    if os.environ.get(otomatik.KILIT_TUTULUYOR) == "1":
+        return
+    try:
+        _lock_stack.enter_context(otomatik.kayit_kilidi(otomatik.KILIT))
+    except otomatik.Mesgul:
+        print_problems(["Başka bir kayıt sürüyor (arayüz ya da otomatik kuyruk); bitince tekrar dene."])
+        raise SystemExit(1)
 
 
 def print_problems(problems: list[str]) -> None:
@@ -135,6 +157,7 @@ def main() -> None:
     if problems:
         print_problems(problems)
         raise SystemExit(1)
+    hold_recording_lock()
 
     made: list[Path] = []
     failed: list[tuple[str, str]] = []

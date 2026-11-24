@@ -5,6 +5,7 @@ Yalnız bu bilgisayardan erişilir (127.0.0.1). Sayfa arayuz/ klasöründen sunu
 """
 
 import argparse
+import contextlib
 import json
 import mimetypes
 import os
@@ -17,7 +18,7 @@ import webbrowser
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import parse_qs, unquote, urlparse
 
 import eniyi
@@ -41,9 +42,24 @@ CHUNK = 1 << 20
 LOG_LINES = 40
 
 
+# Highlight listesini üreten kod: biri değişince (puan ölçütü, demodan okunan alanlar) önbellek eskir.
+SCORING_CODE = (ROOT / "highlights.py", ROOT / "analyze.py")
+
+
 def fresh(f: Path, demo: Path) -> bool:
-    """Önbellek dosyası demodan yeni mi."""
-    return f.exists() and f.stat().st_mtime >= demo.stat().st_mtime
+    """Highlight önbelleği demodan ve puanlama kodundan yeni mi (puanlama değişince eski listeler yeniden hesaplanır)."""
+    if not f.exists():
+        return False
+    mtime = f.stat().st_mtime
+    return mtime >= demo.stat().st_mtime and all(mtime >= c.stat().st_mtime for c in SCORING_CODE)
+
+
+def safe_relative(rel: str) -> bool:
+    """Sunulacak yol göreli ve sade mi. Ters bölü, sürücü, UNC (//sunucu) ve '..' reddedilir."""
+    if not rel or "\\" in rel or ":" in rel or rel.startswith("/"):
+        return False
+    p = PureWindowsPath(rel)
+    return not p.is_absolute() and not p.drive and ".." not in p.parts
 
 
 def match_code(did: str) -> str:
@@ -63,6 +79,9 @@ class App:
         self.locks: dict[str, threading.Lock] = {}
         self.lock = threading.Lock()
         self.job = {"durum": "bos", "mesaj": "", "satirlar": [], "demo": None}
+        self.proc: subprocess.Popen | None = None  # süren kaydın klip.py süreci (durdurmak için)
+        self.stop_requested = False
+        self._demo_cache: tuple[tuple, dict[str, Path]] | None = None
         self.montage_lock = threading.Lock()
         self.kilit = otomatik.KILIT  # otomatik kuyrukla paylaşılan kayıt kilidi
         self.oto_dosya = otomatik.DURUM_DOSYASI
@@ -100,7 +119,9 @@ class App:
         """Eskiyen analiz önbelleklerini siler; demo açılınca yeniden hesaplanır. Silinen demo sayısı."""
         n = 0
         for did, p in self.demos().items():
-            files = [p.parent / f"{did}.highlights.json"] + ([p.parent / f"{did}.stats.json"] if stats else [])
+            # Diğer oyuncuların listeleri (<id>.highlights.<steamid>.json) de aynı ayarlara bağlı.
+            players = [f for f in p.parent.glob("*.highlights.*.json") if f.name.startswith(f"{did}.highlights.")]
+            files = [p.parent / f"{did}.highlights.json", *players] + ([p.parent / f"{did}.stats.json"] if stats else [])
             hit = False
             with self.demo_lock(did):
                 for f in files:
@@ -112,7 +133,14 @@ class App:
 
     # --- demolar ---
     def demos(self) -> dict[str, Path]:
-        """id -> en iyi dosya (.dem varsa o, yoksa arşiv)."""
+        """id -> en iyi dosya (.dem varsa o, yoksa arşiv).
+
+        Klasörler yalnız içerikleri değişince yeniden taranır: dosya eklenince, silinince ya da adı değişince
+        klasörün değişme zamanı da değişir. Kayıt sürerken arayüz 2 sn'de bir sorar; İndirilenler kalabalık olabilir.
+        """
+        key = tuple((str(f), f.stat().st_mtime_ns if f.is_dir() else None) for f in self.folders)
+        if self._demo_cache is not None and self._demo_cache[0] == key:
+            return dict(self._demo_cache[1])
         found: dict[str, Path] = {}
         for folder in self.folders:
             if not folder.is_dir():
@@ -122,7 +150,8 @@ class App:
                     did = demo_id(p)
                     if did not in found or p.suffix.lower() == ".dem":
                         found[did] = p
-        return found
+        self._demo_cache = (key, found)
+        return dict(found)
 
     def demo_path(self, did: str) -> Path:
         p = self.demos().get(did)
@@ -135,13 +164,14 @@ class App:
             return self.locks.setdefault(did, threading.Lock())
 
     def cached_stats(self, path: Path) -> dict | None:
+        """Demonun istatistik önbelleği; yoksa, bozuksa ya da demodan eskiyse (aynı adla yeniden yüklendi) None."""
         f = path.with_name(demo_id(path) + ".stats.json")
-        if f.exists():
-            try:
-                return json.loads(f.read_text(encoding="utf-8"))
-            except ValueError:
+        try:
+            if f.stat().st_mtime < path.stat().st_mtime:
                 return None
-        return None
+            return json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
 
     def clip_files(self, did: str) -> list[Path]:
         if not self.out_dir.is_dir():
@@ -232,6 +262,7 @@ class App:
         for h in sorted(select_clips(player["highlights"], self.cfg["min_skor"]), key=lambda h: h["score"], reverse=True):
             clip = files.get(int(h["round"]))
             rows.append({"round": h["round"], "score": h["score"], "labels": h["labels"], "weapons": h["weapons"],
+                         "ozellikler": h.get("ozellikler", []), "puanlar": h.get("puanlar", []),
                          "saniye": round(clip_seconds(h)), "klip": f"/klip/{clip.name}" if clip else None})
         return rows
 
@@ -253,10 +284,13 @@ class App:
         with self.demo_lock(did):
             demo = open_demo(self.demo_path(did))
             others = [s for s in known if s != default["steamid"]]
+            # Ayarlardaki oyuncu bu demoda yoksa (arkadaşın demosu) herkes kendi dosyasında saklanır.
+            has_default = default["steamid"] is not None
             players = None
-            if known and default["steamid"] and fresh(highlights_path(demo), demo) \
+            if known and (not has_default or fresh(highlights_path(demo), demo)) \
                     and all(fresh(highlights_path(demo, s), demo) for s in others):
-                players = [{**default, "highlights": json.loads(highlights_path(demo).read_text(encoding="utf-8"))}]
+                players = [{**default, "highlights": json.loads(highlights_path(demo).read_text(encoding="utf-8"))}] \
+                    if has_default else []
                 for s in others:
                     data = read_player(highlights_path(demo, s)) or {}
                     players.append({"steamid": s, "ad": data.get("oyuncu") or s, "varsayilan": False,
@@ -301,7 +335,7 @@ class App:
                 raise ApiError(HTTPStatus.CONFLICT,
                                "Montaj için ffmpeg bulunamadı (winget install Gyan.FFmpeg ya da ayarlarda ffmpeg_yolu).")
             if share is not None:
-                return self._share_video(clips, ffmpeg, share)
+                return self._share_video(clips, ffmpeg, share, player)
             out = self.out_dir / eniyi.MONTAGE_NAME
             part = out.with_name(out.stem + ".part.mp4")  # oynatılan montaj yarım dosyayla bozulmasın
             try:
@@ -331,7 +365,7 @@ class App:
         finally:
             self.montage_lock.release()
 
-    def _share_video(self, clips: list[dict], ffmpeg: Path, opts: paylas.Options) -> dict:
+    def _share_video(self, clips: list[dict], ffmpeg: Path, opts: paylas.Options, player: str | None = None) -> dict:
         stats = {}
         for did, p in self.demos().items():
             if (s := paylas.read_json(p.parent / f"{did}.stats.json")) is not None:
@@ -345,11 +379,10 @@ class App:
             raise ApiError(HTTPStatus.CONFLICT, "Video dosyası kullanımda (oynatılıyor olabilir); kapatıp tekrar deneyin.")
         except subprocess.CalledProcessError as e:
             raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, f"ffmpeg videoyu üretemedi (çıkış kodu {e.returncode}).")
-        paylas.write_meta(out, clips, opts)
+        paylas.write_meta(out, clips, opts, player)
         info = next(i for i in paylas.share_info(self.out_dir) if i["dikey"] == opts.dikey)
-        return {"klip": info["klip"], "adet": len(clips), "boyut_mb": info["boyut_mb"], "tarih": info["tarih"],
-                "dikey": opts.dikey, "secenekler": info["secenekler"]}
-
+        return {"klip": info["klip"], "adet": len(clips), "oyuncu": player, "boyut_mb": info["boyut_mb"],
+                "tarih": info["tarih"], "dikey": opts.dikey, "secenekler": info["secenekler"]}
 
     # --- kariyer ---
     def career(self) -> dict:
@@ -359,19 +392,36 @@ class App:
     # --- kayıt ---
     def start_recording(self, did: str, best: int, player: str | None = None) -> dict:
         """player: ad ya da SteamID64 (klip.py --oyuncu); boşsa ayarlar.json'daki oyuncu."""
+        if self.job["durum"] == "calisiyor":
+            raise ApiError(HTTPStatus.CONFLICT, "Başka bir kayıt sürüyor.")
+        if otomatik.kilit_dolu(self.kilit):
+            raise ApiError(HTTPStatus.CONFLICT, "Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
+        path = self.demo_path(did)
+        # Ön kontrol kilit dışında: PostgreSQL'i başlatması saniyeler sürer, bu sırada öteki istekler beklemesin.
+        csgo = Path(self.cfg["csgo_klasoru"]) if self.cfg["csgo_klasoru"] else find_csgo_dir()
+        _, problems = preflight(self.cfg, csgo)
+        if problems:
+            raise ApiError(HTTPStatus.CONFLICT, "Kayıt başlayamaz: " + " ".join(problems))
         with self.lock:
             if self.job["durum"] == "calisiyor":
                 raise ApiError(HTTPStatus.CONFLICT, "Başka bir kayıt sürüyor.")
             if otomatik.kilit_dolu(self.kilit):
                 raise ApiError(HTTPStatus.CONFLICT, "Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
-            path = self.demo_path(did)
-            csgo = Path(self.cfg["csgo_klasoru"]) if self.cfg["csgo_klasoru"] else find_csgo_dir()
-            _, problems = preflight(self.cfg, csgo)
-            if problems:
-                raise ApiError(HTTPStatus.CONFLICT, "Kayıt başlayamaz: " + " ".join(problems))
+            self.stop_requested = False
             self.job = {"durum": "calisiyor", "mesaj": "Kayıt başladı", "satirlar": [], "demo": did, "oyuncu": player}
         threading.Thread(target=self._record, args=(path, best, player), daemon=True).start()
         return {"durum": "calisiyor", "oyuncu": player}
+
+    def stop_recording(self, did: str) -> dict:
+        """Süren kaydı durdurur: klip.py ve açtığı her şey (csdm, CS2) kapatılır. Biten klipler kalır."""
+        with self.lock:
+            if self.job["durum"] != "calisiyor" or self.job["demo"] != did:
+                raise ApiError(HTTPStatus.CONFLICT, "Bu demoda süren bir kayıt yok.")
+            self.stop_requested = True
+            proc = self.proc
+        if proc is not None:
+            render.kill_tree(proc.pid)
+        return {"durum": "durduruluyor"}
 
     def record_command(self, path: Path, best: int, player: str | None = None) -> list[str]:
         cmd = [sys.executable, str(ROOT / "klip.py"), str(path), "--en-iyi", str(best),
@@ -379,46 +429,82 @@ class App:
         return cmd + [f"--oyuncu={player}"] if player else cmd  # '=' ile: '-' ile başlayan ad bayrak sanılmasın
 
     def _record(self, path: Path, best: int, player: str | None = None) -> None:
-        env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+        env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", **{otomatik.KILIT_TUTULUYOR: "1"})
         cmd = self.record_command(path, best, player)
         try:
             with otomatik.kayit_kilidi(self.kilit), subprocess.Popen(
                     cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
                     text=True, encoding="utf-8", errors="replace",
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as p:
+                self.proc = p
+                if self.stop_requested:  # durdur, süreç açılmadan önce geldi
+                    render.kill_tree(p.pid)
                 for line in p.stdout:
                     if line.strip():
                         self.job["satirlar"] = (self.job["satirlar"] + [line.rstrip()])[-LOG_LINES:]
             ok = p.returncode == 0
-            self.job.update(durum="bitti" if ok else "hata",
-                            mesaj="Kayıt bitti" if ok else (self.job["satirlar"] or ["Kayıt başarısız"])[-1])
+            if self.stop_requested:
+                self.job.update(durum="hata", mesaj="Kayıt durduruldu. Bitmiş klipler korundu.")
+            else:
+                self.job.update(durum="bitti" if ok else "hata",
+                                mesaj="Kayıt bitti" if ok else (self.job["satirlar"] or ["Kayıt başarısız"])[-1])
         except otomatik.Mesgul:
             self.job.update(durum="hata", mesaj="Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
-        except OSError as e:
-            self.job.update(durum="hata", mesaj=str(e))
+        except Exception as e:  # noqa: BLE001 — ne olursa olsun iş "sürüyor"da kalmasın (sonraki kayıtlar 409 alır)
+            self.job.update(durum="hata", mesaj=f"Kayıt başlatılamadı: {e}")
+        finally:
+            self.proc = None
 
     # --- yükleme ---
     def upload(self, name: str, length: int, stream) -> dict:
         name = Path(unquote(name)).name
+        # Reddederken de gövde okunur: tarayıcı gönderirken bağlantı kapanırsa yanıtı göremez, "bağlantı koptu" der.
         if not name.lower().endswith(DEMO_SUFFIXES):
+            read_body(stream, length)
             raise ApiError(HTTPStatus.BAD_REQUEST, "Yalnız .dem, .dem.zst, .dem.gz, .dem.bz2 yüklenebilir.")
+        if not re.fullmatch(r'[^<>:"/\\|?*\x00-\x1f]+', name):  # ':' Windows'ta gizli veri akışına yazar
+            read_body(stream, length)
+            raise ApiError(HTTPStatus.BAD_REQUEST, "Dosya adında izin verilmeyen karakter var.")
         UPLOADS.mkdir(exist_ok=True)
-        dst, tmp = UPLOADS / name, UPLOADS / (name + ".part")
+        dst = UPLOADS / name
+        if dst.exists():
+            if read_body(stream, length, same_as=dst):  # aynı dosya yeniden bırakıldı (bayt bayt aynı)
+                return {"id": demo_id(dst), "zaten_var": True}
+            raise ApiError(HTTPStatus.CONFLICT, f"{name} adında başka bir demo zaten var; dosyanın adını değiştirip yükleyin.")
+        tmp = UPLOADS / f"{name}.{threading.get_ident()}.part"  # aynı anda iki yükleme aynı dosyaya yazmasın
         left = length
-        with open(tmp, "wb") as f:
-            while left > 0:
-                chunk = stream.read(min(CHUNK, left))
-                if not chunk:
-                    break
-                f.write(chunk)
-                left -= len(chunk)
-        if left:
+        try:
+            with open(tmp, "wb") as f:
+                while left > 0:
+                    chunk = stream.read(min(CHUNK, left))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    left -= len(chunk)
+            if left:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "Yükleme yarıda kesildi.")
+            tmp.replace(dst)
+        except BaseException:  # iptal (bağlantı koptu) dahil: yarım dosya kalmasın
             tmp.unlink(missing_ok=True)
-            raise ApiError(HTTPStatus.BAD_REQUEST, "Yükleme yarıda kesildi.")
-        tmp.replace(dst)
+            raise
         if UPLOADS not in self.folders:
             self.folders.append(UPLOADS)
         return {"id": demo_id(dst)}
+
+
+def read_body(stream, length: int, same_as: Path | None = None) -> bool:
+    """Gövdeyi okuyup atar. same_as verilirse gövde o dosyayla bayt bayt aynı mı döner (yoksa True)."""
+    left = length
+    with (open(same_as, "rb") if same_as else contextlib.nullcontext()) as f:
+        same = same_as is None or same_as.stat().st_size == length
+        while left > 0:
+            chunk = stream.read(min(CHUNK, left))
+            if not chunk:
+                return False
+            if same and f is not None and f.read(len(chunk)) != chunk:
+                same = False
+            left -= len(chunk)
+    return same
 
 
 class ApiError(Exception):
@@ -444,6 +530,29 @@ def make_handler(app: App):
             self.end_headers()
             self.wfile.write(body)
 
+        def local_names(self) -> set[str]:
+            port = self.server.server_address[1]
+            return {f"127.0.0.1:{port}", f"localhost:{port}"}
+
+        def refuse(self, status: HTTPStatus, message: str) -> None:
+            self.close_connection = True  # okunmamış gövde sonraki istek sanılmasın
+            self.send_json({"hata": message}, status)
+
+        def trusted(self) -> bool:
+            """Başka siteden gelen isteği reddeder; reddettiyse False.
+
+            Host: DNS rebinding (başka alan adı 127.0.0.1'e çözülür). Origin: CSRF (başka site POST atar);
+            tarayıcı dışı istemciler Origin göndermez, onlar kabul edilir.
+            """
+            if self.headers.get("Host", "") not in self.local_names():
+                self.refuse(HTTPStatus.FORBIDDEN, "Bu sunucuya yalnız 127.0.0.1 ya da localhost adıyla erişilir.")
+                return False
+            origin = self.headers.get("Origin")
+            if origin is not None and origin.removeprefix("http://") not in self.local_names():
+                self.refuse(HTTPStatus.FORBIDDEN, "Başka bir siteden gelen istek reddedildi.")
+                return False
+            return True
+
         def handle_api(self, fn):
             try:
                 self.send_json(fn())
@@ -455,6 +564,8 @@ def make_handler(app: App):
                 self.send_json({"hata": f"Beklenmeyen hata: {e}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
         def do_GET(self):
+            if not self.trusted():
+                return
             url = urlparse(self.path)
             path = unquote(url.path)
             who = (parse_qs(url.query).get("oyuncu") or [""])[0].strip() or None
@@ -472,8 +583,6 @@ def make_handler(app: App):
                 return self.handle_api(app.best)
             if path == "/api/otomatik":
                 return self.handle_api(lambda: otomatik.ozet(app.oto_dosya, app.kilit))
-
-
             if path == "/api/kariyer":
                 return self.handle_api(app.career)
             if m := re.fullmatch(r"/api/demo/([^/]+)/klipler", path):
@@ -487,11 +596,25 @@ def make_handler(app: App):
             return self.send_file(WEB, path.lstrip("/") or "index.html")
 
         def do_POST(self):
+            if not self.trusted():
+                return
             path = unquote(urlparse(self.path).path)
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0:
+                return self.refuse(HTTPStatus.BAD_REQUEST, "Content-Length geçersiz.")
             if path == "/api/yukle":
                 name = self.headers.get("X-Dosya-Adi", "")
+                self.close_connection = True  # reddedilen yüklemenin okunmamış gövdesi sonraki istek sanılmasın
                 return self.handle_api(lambda: app.upload(name, length, self.rfile))
+            if m := re.fullmatch(r"/api/demo/([^/]+)/durdur", path):
+                return self.handle_api(lambda: app.stop_recording(m.group(1)))
+            # JSON zorunlu: tarayıcı başka siteden application/json POST'u ön denetimsiz gönderemez.
+            ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
+            if length and ctype != "application/json":
+                return self.refuse(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Gövde application/json olmalı.")
             body = self.rfile.read(length) if length else b"{}"
             if m := re.fullmatch(r"/api/demo/([^/]+)/kaydet", path):
                 def start():
@@ -513,8 +636,6 @@ def make_handler(app: App):
                         raise ApiError(HTTPStatus.BAD_REQUEST, "Geçersiz JSON.")
                     return app.save_settings(data)
                 return self.handle_api(save)
-
-
             if m := re.fullmatch(r"/api/demo/([^/]+)/yeniden-hesapla", path):
                 return self.handle_api(lambda: app.stats(m.group(1), refresh=True))
             if path == "/api/en-iyi/montaj":
@@ -540,6 +661,8 @@ def make_handler(app: App):
             self.send_json({"hata": "Bulunamadı."}, HTTPStatus.NOT_FOUND)
 
         def send_file(self, base: Path, rel: str):
+            if not safe_relative(rel):  # diske dokunmadan: UNC yolu resolve() ile ağa bağlanır
+                return self.send_json({"hata": "Dosya bulunamadı."}, HTTPStatus.NOT_FOUND)
             f = (base / rel).resolve()
             if base.resolve() not in f.parents or not f.is_file():
                 return self.send_json({"hata": "Dosya bulunamadı."}, HTTPStatus.NOT_FOUND)

@@ -2235,7 +2235,7 @@
    "highlightlar": [
     {
      "round": 15,
-     "score": 8.0,
+     "score": 10.0,
      "labels": [
       "1v2 clutch",
       "2K",
@@ -2245,11 +2245,32 @@
       "m4a1_silencer"
      ],
      "saniye": 12,
-     "klip": "/klip/anubis_59cf10f2_R15_1v2-clutch.mp4"
+     "klip": "/klip/anubis_59cf10f2_R15_1v2-clutch.mp4",
+     "ozellikler": [
+      "maçı bitirdi"
+     ],
+     "puanlar": [
+      [
+       "2K",
+       3
+      ],
+      [
+       "1v2 clutch",
+       4
+      ],
+      [
+       "2 HS",
+       1.0
+      ],
+      [
+       "maçı bitirdi",
+       2.0
+      ]
+     ]
     },
     {
      "round": 20,
-     "score": 7.5,
+     "score": 9.5,
      "labels": [
       "3K",
       "3 HS"
@@ -2259,7 +2280,29 @@
       "m4a1_silencer"
      ],
      "saniye": 16,
-     "klip": "/klip/anubis_59cf10f2_R20_3k.mp4"
+     "klip": "/klip/anubis_59cf10f2_R20_3k.mp4",
+     "ozellikler": [
+      "açılış",
+      "ekonomi farkı"
+     ],
+     "puanlar": [
+      [
+       "3K",
+       6
+      ],
+      [
+       "3 HS",
+       1.5
+      ],
+      [
+       "açılış",
+       1.0
+      ],
+      [
+       "ekonomi farkı",
+       1.0
+      ]
+     ]
     },
     {
      "round": 1,

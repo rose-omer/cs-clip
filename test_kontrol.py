@@ -5,6 +5,7 @@ from config import DEFAULTS
 def test_blocking_programs_lists_faceit_and_cs2():
     procs = {"explorer.exe", "cs2.exe", "faceitclient.exe"}
     assert set(kontrol.blocking_programs(procs)) == {"cs2.exe", "faceitclient.exe"}
+    assert kontrol.blocking_programs({"faceit.exe"}) == ["faceit.exe"]  # yeni FACEIT istemcisinin süreç adı
 
 
 def test_preflight_reports_blockers_without_touching_them(tmp_path, monkeypatch):

@@ -18,6 +18,16 @@ silah dağılımı ve kliplerin kendisi.
 |---|---|---|
 | ![En iyi anlarım](docs/5-en-iyi-anlar.png) | ![Kariyer](docs/6-kariyer.png) | ![Ayarlar](docs/7-ayarlar.png) |
 
+Puanlama ve kayıt yenilikleri:
+
+| Puan dökümü ve bağlam etiketleri | Kayıt sürerken Durdur |
+|---|---|
+| ![Klip kartları: açılış ve ekonomi farkı etiketleri, açık puan dökümü](docs/8-klipler-puan-dokumu.png) | ![Kayıt ilerlemesi ve Durdur düğmesi](docs/9-kayit-durdur.png) |
+
+| Ayarlar: CS2 kaydı, FACEIT, canlı kayıt | Maç özeti (güncel) |
+|---|---|
+| ![Ayarlar sayfasının yeni bölümleri](docs/10-ayarlar-yeni-bolumler.png) | ![Güncel maç özeti](docs/11-mac-ozeti-guncel.png) |
+
 ## Kullanım
 
 ![Kullanım: maç seçme, sekmeler, en iyi anlar ve kariyer](docs/kullanim.gif)
@@ -63,6 +73,7 @@ Bilinen sorunlar ve ölçümler: [NOTLAR.md](NOTLAR.md). İlk kayıt ve sorun gi
    | Veritabanı | `initdb --locale=C` ile `%LOCALAPPDATA%\csdm-pg\data` (Türkçe Windows'ta kurucunun `initdb` çökmesini aşar), rastgele şifre, 5432 doluysa sonraki port | atlanır |
    | Başlatma, `csdm` veritabanı | `pg_ctl start`, `createdb csdm` | atlanır |
    | CSDM ayarları | `%USERPROFILE%\.csdm\settings.json`: veritabanı bağlantısı + şifre, ffmpeg yolu; eksik alanlar şablondan. Değişirse eskisi `settings.json.yedek` | yalnız eksik/yanlış alanlar |
+   | Canlı kayıt GSI | `canli.py kur`: CS2'nin `game\csgo\cfg` klasörüne GSI dosyası. CS2 yoksa uyarır, kurulum sürer | güncelse atlanır |
    | PATH | PostgreSQL `bin` kullanıcı PATH'ine (psql) | atlanır |
    | Testler | `pytest -q` | — |
 
@@ -81,13 +92,19 @@ arayüz kayıttan önce kendisi başlatır.
 - Solda İndirilenler ve `demos/` klasöründeki demolar; sürükle-bırak ile demo yüklenebilir.
 - Demo seçince maç istatistikleri: skor, rating, ADR, K/D/A, KAST, HS%, açılış kill'leri, iki takımın skor tablosu, round çizelgesi, silahlar.
 - Derin analiz: harita üstünde kill/ölüm ısı haritası, utility (atılan bombalar, flaş asisti, kör süresi, bomba hasarı), nişan (isabet, sprey isabeti, kafa isabeti silaha göre, yaklaşık tepki süresi). Eski `.stats.json`'larda bu bölüm yoktur; sayfadaki "Yeniden hesapla" düğmesi ekler.
-- Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı).
+- Highlight listesi ve kaydedilmiş klipler sayfada oynatılır. Her kartta bağlam etiketleri (açılış, ekonomi farkı…)
+  ve "Puan dökümü" (puanın hangi ölçütten geldiği) görünür.
+- "Klipleri kaydet" kaydı arka planda başlatır (FACEIT ve CS2 kapalı olmalı). Kayıt sürerken **Durdur** klip.py'yi ve
+  açtığı CS2'yi kapatır; biten klipler kalır.
 - Skor tablosunda bir oyuncuya tıklayınca onun highlight'ları listelenir; "Bu oyuncunun kliplerini kaydet" onun gözünden kaydeder.
   "Herkesin en iyi anı" maçtaki her oyuncunun en yüksek puanlı anını sıralar. "En iyi anlarım" vitrininde oyuncuya göre süzülür.
 - İlk açılışta istatistik hesaplanır ve demonun yanına `.stats.json` olarak saklanır; sonraki açılışlar anında.
 - **Ayarlar** sayfası (`#ayarlar`): oyuncu, en düşük puan, maç başına klip, klip öncesi/sonrası süre, temiz HUD,
-  montaj, klip ve demo klasörleri, araç yolları. Değerler doğrulanıp `ayarlar.json`'a yazılır (`GET/POST /api/ayarlar`).
+  montaj, klip ve demo klasörleri; CS2 kaydı (çözünürlük, CRF, kayıt sistemi); otomatik kayıt ve FACEIT; canlı kayıt;
+  araç yolları. Her ayar doğrulanıp `ayarlar.json`'a yazılır (`GET/POST /api/ayarlar`); doğrulanamayan alan hata verir.
   Oyuncu ya da süreler değişince maçların analizi yeniden yapılır.
+- Sunucu yalnız `127.0.0.1` / `localhost` adıyla gelen istekleri kabul eder; başka siteden gelen POST, JSON olmayan
+  gövde ve klasör dışı dosya yolu reddedilir.
 - "En iyi anlarım" → Montaj: **Sade** en iyi klipleri yeniden kodlamadan birleştirir; **Paylaşım** aşağıdaki
   paylaşım videosunu üretir (biçim, yerleşim, kart, etiket, kalite, boyut, müzik seçilebilir).
 
@@ -108,6 +125,43 @@ arayüz kayıttan önce kendisi başlatır.
 
 Diğer: `otomatik.py durum` (sırayı gösterir), `otomatik.py ekle <demo>` (elle sıraya ekler), `--temizle` (kaydı biten
 demoyu Geri Dönüşüm Kutusu'na taşır), `arayuz.bat --otomatik` (izleyiciyi arayüzle aynı pencerede çalıştırır).
+
+## Canlı kayıt (FACEIT açıkken, deneme)
+
+CS2'ye dokunmadan, oynarken kaydeder. FACEIT kapatılmaz, CS Demo Manager ve PostgreSQL gerekmez.
+
+1. `canli.bat kur`: CS2'nin `game\csgo\cfg` klasörüne `gamestate_integration_csklip.cfg` yazılır (`kur.bat` da
+   yazar). CS2'yi yeniden aç.
+2. `canli.bat` (= `canli.py izle`) açık kalsın. Maç canlıya geçince kayıt kendiliğinden başlar; maç bitince, maçtan
+   (devre arasında da) çıkınca ya da CS2 60 sn haber vermezse durur. Ham kayıt `kayitlar/` klasörüne yazılır.
+   - ffmpeg kendiliğinden kapanırsa (NVENC yok, ses cihazı yanlış) birkaç saniye içinde hata ve ffmpeg günlüğü
+     yazılır; o maç yeniden denenmez.
+   - CSDM ile demo kaydı sürerken (arayüz ya da otomatik kuyruk) ekran kaydı açılmaz.
+   - Maç ortasında açılırsa yarım round'a çapa yazılmaz; kayıt sonraki round'dan geçerli olur.
+3. Maç bitince demoyu indir, sonra `canli.bat kes <demo>` çalıştır. En iyi anlar kayıttan kesilir ve `klipler/`
+   klasörüne yazılır. Klip adları CSDM klipleriyle aynı biçimdedir.
+
+Nasıl çalışır:
+- Görüntü: FFmpeg `ddagrab` (Windows Desktop Duplication) + NVENC. Oyun sürecine enjeksiyon yoktur.
+  Kodlama ekran kartının ayrı yongasında yapılır.
+- Zaman: CS2'nin resmi GSI'si her round'un başladığı anı `127.0.0.1:8770` adresine bildirir. Her kare kendi duvar
+  saatini taşır. Round başlangıcı demodaki `round_freeze_end` tick'iyle eşlenir.
+- Eşleme: demoya uyan kayıt, ardışık round sürelerinin karşılaştırılmasıyla bulunur (en az 3 round, ortanca fark
+  2 sn altında). Birden çok kayıt uyarsa en çok round'u kapsayan seçilir. Elle seçmek için: `--kayit kayitlar\<ad>.json`.
+
+| Ayar | Varsayılan | Ne yapar |
+|---|---|---|
+| `canli_klasoru` | `kayitlar` | Ham kayıtlar ve oturum dosyaları |
+| `canli_port` | 8770 | GSI portu; değişirse `canli.bat kur` yeniden çalıştırılır. Başka süreç tutuyorsa açılmaz |
+| `canli_fps` | 60 | Kayıt kare hızı (oyun FPS'inden bağımsız) |
+| `canli_kodlayici` | `h264_nvenc` | `hevc_nvenc` / `av1_nvenc` de olur |
+| `canli_ses` | boş | DirectShow ses cihazı (ör. Stereo Mix; tırnak gerekmez); boşsa sessiz |
+
+Sınırlar:
+- Görüntü yalnız kaydı yapanın gözünden. Başka oyuncunun gözü için CSDM kaydı gerekir.
+- Uygulama açıkken oynanan maçlar kaydedilir. Ses için bir loopback cihazı gerekir.
+- Kesim yeniden kodlama yapmaz: klip en fazla 1 sn erken başlar (anahtar kare saniyede bir).
+- Maç başına geçici olarak birkaç GB disk kullanılır. Ham kayıt şimdilik elle silinir.
 
 ## Komutlar
 
@@ -168,8 +222,25 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | Wallbang, noscope, kör iken kill | +2 |
 | Smoke arkası | +1.5 |
 | Bıçak | +3 |
-| 2 sn içinde art arda kill | +1 |
+| 2 sn içinde art arda kill (aynı tick'teki collateral hariç) | +1 |
 
+Bağlam ölçütleri (kartta etiket olarak görünür, klip adına girmez):
+
+| Ölçüt | Puan |
+|---|---|
+| Açılış: round'un ilk kill'i | +1 |
+| Ekonomi farkı: rakibin round başı ekipmanı seninkinin 2,5 katı ve en az $3000 (kill başı) | +1 |
+| Az can: kill anında canın 20 ya da altında | +1 |
+| Havadayken kill (kill başı) | +2 |
+| Bomba ya da molotof ile kill (kill başı) | +2 |
+| Zeus (kill başı) | +3 |
+| Collateral: aynı tick'te ikinci kill | +3 |
+| Uzatma round'u (5v5: 25 ve sonrası, wingman: 17 ve sonrası) | +1 |
+| Maçı bitiren round (kazanıldıysa) | +2 |
+
+- Clutch, takım boyuna göre hesaplanır (wingman'de 1v2).
+- Can ve ekipman değeri demodan okunamazsa ilgili ölçütler atlanır; puanlama eski ölçütlerle sürer.
+- Puanlama kodu (`highlights.py`, `analyze.py`) değişince arayüzdeki highlight önbellekleri yeniden hesaplanır.
 - Isınma ve maç öncesi bıçak kill'leri sayılmaz.
 - Takım arkadaşı kill'i ve intihar sayılmaz.
 - Kill'ler arasında 8 sn'den uzun boşluk varsa klip parçalara bölünür; parçalar birleştirilir.
@@ -192,9 +263,10 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | `faceit.py` | FACEIT Data API ile son maç demolarını indirme |
 | `onarim.py` | Başa sarınca CS2'yi çökerten demoların ilk tam paketini onarır |
 | `stats.py` | Maç istatistikleri (rating, ADR, KAST, round çizelgesi) |
-| `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa (`ayarlar.js`: Ayarlar sayfası) |
+| `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa (`js/*.js`: sayfa betikleri, index.html'deki sırayla yüklenir; `ayarlar.js`: Ayarlar sayfası) |
 | `config.py` | `ayarlar.json` okur, doğrular, yazar |
 | `araclar/` | Hız ölçüm ve deneme script'leri, CSDM ayar şablonu |
+| `canli.py`, `canli.bat`, `gsi.py` | Canlı kayıt: GSI dinleyici, ekran kaydı, demoyla eşleme ve kesim |
 | `analiz_derin.py` | Isı haritası konumları, utility ve nişan metrikleri (`stats.json` içindeki `derin`) |
 | `tasarimlar/` | Arayüz tasarım taslakları |
 | `docs/` | Ekran görüntüleri |

@@ -216,8 +216,9 @@ def test_settings_get_and_save(server, tmp_path):
 
     # oyuncu değişince o demonun önbellekleri silinir, diğer dosyalar kalır
     (demos / "1-aaaa1111-x-1-1.dem").write_bytes(b"d")
-    for ext in (".highlights.json", ".stats.json"):
+    for ext in (".highlights.json", ".highlights.76561198000000002.json", ".stats.json"):
         (demos / f"1-aaaa1111-x-1-1{ext}").write_text("[]", encoding="utf-8")
+    (demos / "1-bbbb-x-1-1.highlights.7656.json").write_text("[]", encoding="utf-8")  # demosu yok: dokunulmaz
     new_out = tmp_path / "yeni_klipler"
     status, body = send_settings(url + "/api/ayarlar", {"oyuncu": "baskasi", "once_sn": 4, "cikti_klasoru": str(new_out)})
     assert status == 200, body
@@ -225,6 +226,8 @@ def test_settings_get_and_save(server, tmp_path):
     assert json.loads(a.settings_path.read_text(encoding="utf-8"))["once_sn"] == 4
     assert a.cfg["oyuncu"] == "baskasi" and a.out_dir == new_out.resolve()
     assert not (demos / "1-aaaa1111-x-1-1.stats.json").exists()
+    assert not (demos / "1-aaaa1111-x-1-1.highlights.76561198000000002.json").exists()  # diğer oyuncunun listesi
+    assert (demos / "1-bbbb-x-1-1.highlights.7656.json").exists()
     assert (demos / "1-aaaa1111-x-1-1.dem").exists()
 
     # yalnız montaj değişince önbelleğe dokunulmaz
@@ -247,7 +250,8 @@ def test_settings_rejects_invalid_without_writing(server, tmp_path):
 def test_settings_bad_json(server, tmp_path):
     url, (a, _, _) = server
     a.settings_path = tmp_path / "ayarlar.json"
-    req = urllib.request.Request(url + "/api/ayarlar", data=b"{bozuk", method="POST")
+    req = urllib.request.Request(url + "/api/ayarlar", data=b"{bozuk", method="POST",
+                                 headers={"Content-Type": "application/json"})
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(req)
     assert e.value.code == 400
@@ -346,3 +350,207 @@ def test_old_stats_json_is_served_and_can_be_recomputed(server, monkeypatch):
     assert status == 200 and body["derin"] == {"surum": 1} and len(calls) == 1
     saved = json.loads((demos / f"{did}.stats.json").read_text(encoding="utf-8"))
     assert saved["derin"] == {"surum": 1}
+
+
+# --- başka siteden gelen istekler ---
+
+@pytest.mark.parametrize("rel,ok", [
+    ("a.mp4", True), ("alt/a.mp4", True), ("//saldirgan/pay/x.mp4", False), (r"\\saldirgan\pay\x.mp4", False),
+    ("C:/Windows/win.ini", False), ("../gizli.txt", False), ("a/../../b", False), ("", False)])
+def test_safe_relative(rel, ok):
+    assert arayuz.safe_relative(rel) is ok
+
+
+@pytest.mark.parametrize("yol", ["/klip///saldirgan/pay/x.mp4", "/klip/%5c%5csaldirgan%5cpay%5cx.mp4",
+                                 "/%5c%5csaldirgan%5cpay%5cx.js"])
+def test_unc_yolu_diske_dokunmadan_reddedilir(server, monkeypatch, yol):
+    url, _ = server
+    dokunulan = []
+    monkeypatch.setattr(arayuz.Path, "resolve", lambda self, *a: dokunulan.append(self) or self)
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(url + yol)
+    assert e.value.code == 404
+    assert not any(str(p).startswith(("\\\\", "//")) for p in dokunulan)
+
+
+def istek(url, method="GET", headers=None, data=None):
+    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def test_baska_host_adi_reddedilir(server):
+    url, _ = server
+    assert istek(url + "/api/demolar", headers={"Host": "saldirgan.example:80"}) == 403
+    port = url.rsplit(":", 1)[1]
+    assert istek(url + "/api/demolar", headers={"Host": f"localhost:{port}"}) == 200
+
+
+def test_baska_siteden_post_reddedilir(server, tmp_path):
+    url, (a, _, _) = server
+    a.settings_path = tmp_path / "ayarlar.json"
+    govde = json.dumps({"montaj": False}).encode()
+    json_basligi = {"Content-Type": "application/json"}
+    assert istek(url + "/api/ayarlar", "POST", {**json_basligi, "Origin": "https://saldirgan.example"}, govde) == 403
+    assert istek(url + "/api/ayarlar", "POST", {"Content-Type": "text/plain"}, govde) == 415
+    assert not a.settings_path.exists()
+    assert istek(url + "/api/ayarlar", "POST", {**json_basligi, "Origin": url}, govde) == 200
+
+
+def test_gecersiz_content_length(server):
+    url, _ = server
+    req = urllib.request.Request(url + "/api/ayarlar", data=b"{}", method="POST",
+                                 headers={"Content-Type": "application/json"})
+    req.add_unredirected_header("Content-Length", "abc")
+    try:
+        urllib.request.urlopen(req)
+        kod = 200
+    except urllib.error.HTTPError as e:
+        kod = e.code
+    assert kod == 400
+
+
+# --- kayıt durdurma, önbellekler, yükleme ---
+
+def test_kayit_durdurma(server, monkeypatch):
+    url, (a, _, _) = server
+    oldurulen = []
+    monkeypatch.setattr(arayuz.render, "kill_tree", oldurulen.append)
+    assert post_error(url + "/api/demo/d1/durdur", {})[0] == 409  # süren kayıt yok
+    a.job = {"durum": "calisiyor", "mesaj": "", "satirlar": [], "demo": "d1"}
+    a.proc = type("Surec", (), {"pid": 4242})()
+    assert post_error(url + "/api/demo/baska/durdur", {})[0] == 409  # başka demonun kaydı sürüyor
+    assert post_json(url + "/api/demo/d1/durdur", {}) == (200, {"durum": "durduruluyor"})
+    assert oldurulen == [4242] and a.stop_requested
+
+
+def test_durdurulan_kayit_mesaji(app, monkeypatch, tmp_path):
+    a, demos, _ = app
+
+    class Surec:
+        pid, returncode, stdout = 7, 1, iter(["[csdm] kayıt\n"])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    oldurulen = []
+    monkeypatch.setattr(arayuz.subprocess, "Popen", lambda *a, **k: Surec())
+    monkeypatch.setattr(arayuz.render, "kill_tree", oldurulen.append)
+    a.job = {"durum": "calisiyor", "mesaj": "", "satirlar": [], "demo": "d1"}
+    a.stop_requested = True  # durdur, süreç açılmadan geldi
+    a._record(tmp_path / "d1.dem", 3)
+    assert oldurulen == [7] and a.proc is None
+    assert a.job["durum"] == "hata" and "durduruldu" in a.job["mesaj"]
+
+
+def test_beklenmeyen_hata_isi_takili_birakmaz(app, monkeypatch, tmp_path):
+    a, _, _ = app
+    monkeypatch.setattr(arayuz.subprocess, "Popen", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("bozuk")))
+    a.job = {"durum": "calisiyor", "mesaj": "", "satirlar": [], "demo": "d1"}
+    a._record(tmp_path / "d1.dem", 3)
+    assert a.job["durum"] == "hata" and "bozuk" in a.job["mesaj"]
+
+
+def test_demo_klasoru_degismedikce_yeniden_taranmaz(app, monkeypatch):
+    a, demos, _ = app
+    (demos / "1-aaaa-x-1-1.dem").write_bytes(b"d")
+    assert list(a.demos()) == ["1-aaaa-x-1-1"]
+    taranan = []
+    gercek = arayuz.Path.iterdir
+    monkeypatch.setattr(arayuz.Path, "iterdir", lambda self: taranan.append(self) or gercek(self))
+    assert list(a.demos()) == ["1-aaaa-x-1-1"] and taranan == []  # önbellekten
+    (demos / "1-bbbb-x-1-1.dem").write_bytes(b"d")
+    os.utime(demos, (os.path.getmtime(demos) + 5,) * 2)  # klasör zamanı her dosya sisteminde hemen değişmeyebilir
+    assert sorted(a.demos()) == ["1-aaaa-x-1-1", "1-bbbb-x-1-1"] and taranan
+
+
+def test_eski_istatistik_onbellegi_kullanilmaz(app):
+    a, demos, _ = app
+    demo = demos / "1-aaaa-x-1-1.dem"
+    demo.write_bytes(b"d")
+    st = demos / "1-aaaa-x-1-1.stats.json"
+    st.write_text(json.dumps({"harita": "de_x"}), encoding="utf-8")
+    t = os.path.getmtime(demo)
+    os.utime(st, (t + 5, t + 5))
+    assert a.cached_stats(demo) == {"harita": "de_x"}
+    os.utime(st, (t - 5, t - 5))  # demo aynı adla yeniden yüklendi
+    assert a.cached_stats(demo) is None
+
+
+def test_herkes_onbellegi_varsayilan_oyuncu_yokken_de_kullanilir(app, monkeypatch):
+    a, demos, _ = app
+    did = "1-aaaa-x-1-1"
+    demo = demos / f"{did}.dem"
+    demo.write_bytes(b"d")
+    t = os.path.getmtime(demo) + 5
+    files = {demos / f"{did}.stats.json": {"oyuncular": [{"steamid": "11", "ad": "a"}, {"steamid": "22", "ad": "b"}]}}
+    for sid, ad in (("11", "a"), ("22", "b")):
+        files[demos / f"{did}.highlights.{sid}.json"] = {"oyuncu": ad, "steamid": sid, "highlights": []}
+    for f, data in files.items():
+        f.write_text(json.dumps(data), encoding="utf-8")
+        os.utime(f, (t, t))
+    monkeypatch.setattr(arayuz, "analyze_all", lambda *a, **k: pytest.fail("önbellek kullanılmalıydı"))
+    res = a.everyone(did)
+    assert sorted(r["steamid"] for r in res["oyuncular"]) == ["11", "22"]
+
+
+def yukle(url, ad, govde):
+    req = urllib.request.Request(url + "/api/yukle", data=govde, method="POST", headers={"X-Dosya-Adi": ad})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+def test_ayni_adla_yukleme(server):
+    url, _ = server
+    assert yukle(url, "m.dem", b"x" * 10)[0] == 200
+    assert yukle(url, "m.dem", b"x" * 10) == (200, {"id": "m", "zaten_var": True})  # aynı dosya yeniden
+    for govde in (b"y" * 10, b"z" * 20):  # aynı boyutta ya da farklı boyutta başka içerik
+        kod, yanit = yukle(url, "m.dem", govde)
+        assert kod == 409 and "zaten var" in yanit["hata"]
+    assert (arayuz.UPLOADS / "m.dem").read_bytes() == b"x" * 10
+    assert not list(arayuz.UPLOADS.glob("*.part"))
+
+
+def test_reddedilen_buyuk_yuklemenin_govdesi_okunur(server):
+    url, _ = server
+    kod, yanit = yukle(url, "virus.exe", b"x" * (3 * 1024 * 1024))
+    assert kod == 400 and "yüklenebilir" in yanit["hata"]
+
+
+def test_kopan_yukleme_yarim_dosya_birakmaz(app):
+    a, _, _ = app
+
+    class Kopan:
+        def __init__(self):
+            self.n = 0
+
+        def read(self, k):
+            self.n += 1
+            if self.n > 1:
+                raise ConnectionResetError("tarayıcı iptal etti")
+            return b"x" * k
+
+    with pytest.raises(ConnectionResetError):
+        a.upload("b.dem", 5 * arayuz.CHUNK, Kopan())
+    assert not list(arayuz.UPLOADS.glob("*.part")) and not (arayuz.UPLOADS / "b.dem").exists()
+
+
+def test_yukleme_adinda_iki_nokta_reddedilir(server):
+    url, _ = server
+    assert yukle(url, "a.dem%3Ab.dem", b"x")[0] == 400
+
+
+def test_ornek_veri_gomulu_kopyayla_ayni():
+    """js/ornek.js'teki gömülü kopya (index.html çift tıklanınca kullanılır) ornek.json'la aynı kalmalı."""
+    web = arayuz.ROOT / "arayuz"
+    satir = (web / "js" / "ornek.js").read_text(encoding="utf-8").split("/*ORNEK_BASLA*/", 1)[1].split("/*ORNEK_BITIR*/", 1)[0]
+    assert json.loads(satir) == json.loads((web / "ornek.json").read_text(encoding="utf-8"))

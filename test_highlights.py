@@ -123,3 +123,76 @@ def test_padding_can_be_changed():
     rows = [kill(0, 1000)]
     h = find_highlights(pd.DataFrame(rows), ME, min_score=0, pre_seconds=5, post_seconds=1)[0]
     assert h["segments"] == [[1000 - 5 * TICKRATE, 1000 + TICKRATE]]
+
+
+# --- bağlam ölçütleri ---
+
+def one(rows, **kw):
+    return find_highlights(pd.DataFrame(rows), ME, min_score=0, **kw)[0]
+
+
+def test_puan_dokumu_toplami_skora_esit_ve_labels_degismez():
+    h = one([kill(2, 2000, headshot=True, penetrated=1), kill(2, 2050, victim="e2")])
+    assert h["score"] == sum(p for _, p in h["puanlar"])
+    assert h["labels"] == ["2K", "1 HS", "wallbang", "hızlı"]  # klip adı için eski biçim
+    assert h["ozellikler"] == ["açılış"]
+
+
+def test_acilis_yalniz_roundun_ilk_killi():
+    rows = [other_kill(1, 900, ENEMY_TEAM, MY_TEAM, victim="m1"), kill(1, 1000)]
+    assert "açılış" not in one(rows)["ozellikler"]
+
+
+def test_ekonomi_farki():
+    eco = kill(1, 1000, attacker_round_start_equip_value=700, user_round_start_equip_value=4700)
+    esit = kill(1, 1100, victim="e2", attacker_round_start_equip_value=700, user_round_start_equip_value=1500)
+    h = one([eco, esit])
+    assert ["ekonomi farkı", 1.0] in h["puanlar"]
+
+
+def test_az_can_havada_bomba_zeus():
+    h = one([kill(1, 1000, attacker_health=7, attackerinair=True),
+             kill(1, 1500, victim="e2", weapon="inferno"),
+             kill(1, 2000, victim="e3", weapon="taser")])
+    assert {"az can", "havada", "bomba", "zeus"} <= set(h["ozellikler"])
+    assert ["havada", 2.0] in h["puanlar"] and ["zeus", 3.0] in h["puanlar"]
+
+
+def test_olu_oyuncunun_cani_az_can_sayilmaz():
+    assert "az can" not in one([kill(1, 1000, attacker_health=0)])["ozellikler"]
+
+
+def test_collateral():
+    h = one([kill(1, 1000), kill(1, 1000, victim="e2")])
+    assert ["collateral", 3.0] in h["puanlar"]
+    assert "hızlı" not in h["labels"]  # aynı tick'teki ikinci kill bir kez puanlanır
+
+
+def test_uzatma_ve_maci_bitiren_round():
+    ends = pd.DataFrame([{"tick": 900, "winner": "T"}, {"tick": 3000, "winner": "CT"}])
+    h = one([kill(25, 2000)], round_ends=ends)  # round 26, CT (MY_TEAM) kazandı, son round
+    assert {"uzatma", "maçı bitirdi"} <= set(h["ozellikler"])
+    lost = pd.DataFrame([{"tick": 3000, "winner": "T"}])
+    assert "maçı bitirdi" not in one([kill(25, 2000)], round_ends=lost)["ozellikler"]
+    later = pd.DataFrame([{"tick": 3000, "winner": "CT"}, {"tick": 9000, "winner": "T"}])
+    assert "maçı bitirdi" not in one([kill(25, 2000)], round_ends=later)["ozellikler"]
+
+
+def test_wingman_clutch_takim_boyuna_gore():
+    rows = [other_kill(3, 1000, ENEMY_TEAM, MY_TEAM, victim="m1"),
+            kill(3, 2000, victim="e1"), kill(3, 2500, victim="e2")]
+    ends = pd.DataFrame([{"tick": 3000, "winner": "CT"}])
+    assert "1v2 clutch" in one(rows, round_ends=ends, team_size=2)["labels"]
+    assert not any("clutch" in lb for lb in one(rows, round_ends=ends)["labels"])  # 5v5'te 4 kişi hâlâ sağ
+
+
+def test_wingman_uzatmasi_17_round():
+    assert "uzatma" in one([kill(16, 2000)], team_size=2)["ozellikler"]  # round 17
+    assert "uzatma" not in one([kill(16, 2000)])["ozellikler"]  # 5v5'te round 17 normal süre
+
+
+def test_acilis_dunya_olumunden_etkilenmez():
+    """Round'un ilk ölümü düşme/bomba (saldırgansız) olsa da ilk gerçek kill açılış sayılır."""
+    dunya = {**kill(1, 900, victim="m1"), "attacker_steamid": None, "attacker_team_num": float("nan"),
+             "user_team_num": MY_TEAM, "weapon": "world"}
+    assert "açılış" in one([dunya, kill(1, 1000)])["ozellikler"]

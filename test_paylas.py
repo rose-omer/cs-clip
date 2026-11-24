@@ -152,9 +152,10 @@ def test_share_info_and_meta(tmp_path):
     d.mkdir()
     out = d / "en_iyi_dikey.mp4"
     out.write_bytes(b"v")
-    paylas.write_meta(out, [{"ad": "a.mp4"}], Options(dikey=True))
+    paylas.write_meta(out, [{"ad": "a.mp4"}], Options(dikey=True), "*")
     [info] = paylas.share_info(tmp_path)
     assert info["klip"] == "/klip/paylasim/en_iyi_dikey.mp4" and info["adet"] == 1 and info["dikey"]
+    assert info["oyuncu"] == "*"  # oyuncu süzgeci: kart ve şerit renkleri buna göre
     assert info["secenekler"]["dikey"] is True
 
 
