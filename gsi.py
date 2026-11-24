@@ -12,6 +12,7 @@ Bu modül üç iş yapar:
 import json
 import re
 import secrets
+import socket
 import time
 from dataclasses import dataclass, field
 from http import HTTPStatus
@@ -62,6 +63,12 @@ def cfg_token(csgo_dir: Path) -> str | None:
     return m.group(1) if m else None
 
 
+def cfg_guncel(csgo_dir: Path, port: int) -> bool:
+    """cfg dosyası var, token'lı ve bu porta mı yazılmış (yeniden yazmak gerekmez)."""
+    token = cfg_token(csgo_dir)
+    return token is not None and cfg_yolu(csgo_dir).read_text(encoding="utf-8") == cfg_metni(port, token)
+
+
 def cfg_yaz(csgo_dir: Path, port: int) -> Path:
     """cfg dosyasını yazar. Var olan token korunur; port değiştiyse dosya güncellenir.
 
@@ -91,6 +98,7 @@ class Izleyici:
     harita: str = ""
     mac_evresi: str = ""  # map.phase: warmup | live | intermission | gameover
     round_evresi: str = ""  # round.phase: freezetime | live | over
+    oynandi: bool = False  # bu haritada maç canlıya geçti (devre arası ve molada da True kalır)
     son_durum: float = field(default=0.0)
 
     def besle(self, durum: dict, simdi: float | None = None) -> list[Olay]:
@@ -100,9 +108,14 @@ class Izleyici:
         harita_bilgisi = durum.get("map")
         olaylar: list[Olay] = []
 
+        def bitir(harita: str) -> None:
+            # Canlıya geçmiş maçtan hangi evrede çıkılırsa çıkılsın (devre arası dahil) maç biter.
+            if self.oynandi:
+                olaylar.append(Olay("mac_bitti", simdi, harita, steamid=steamid))
+            self.oynandi = False
+
         if not harita_bilgisi:  # ana menü: maçtan çıkıldı
-            if self.mac_evresi == "live":
-                olaylar.append(Olay("mac_bitti", simdi, self.harita, steamid=steamid))
+            bitir(self.harita)
             self.harita = self.mac_evresi = self.round_evresi = ""
             return olaylar
 
@@ -111,17 +124,19 @@ class Izleyici:
         rnd = str(durum.get("round", {}).get("phase", ""))
 
         if harita != self.harita:
-            if self.mac_evresi == "live":
-                olaylar.append(Olay("mac_bitti", simdi, self.harita, steamid=steamid))
+            bitir(self.harita)
             self.mac_evresi = self.round_evresi = ""
-        if mac == "live" and self.mac_evresi != "live":
+        if mac == "live" and not self.oynandi:
+            self.oynandi = True
             olaylar.append(Olay("mac_basladi", simdi, harita, steamid=steamid))
-        if mac == "live" and rnd == "live" and self.round_evresi != "live":
+        # Round başı yalnız donma süresinin bittiği an: maç ortasında gelen ilk durum (geç açılış, yeniden
+        # bağlanma) round'un başı değildir, o round için çapa yazılmaz.
+        if mac == "live" and rnd == "live" and self.round_evresi == "freezetime":
             # map.round biten round sayısıdır: oynanan round'un numarası bir fazlası.
             no = int(harita_bilgisi.get("round", 0)) + 1
             olaylar.append(Olay("round_basladi", simdi, harita, no, steamid))
-        if mac == "gameover" and self.mac_evresi == "live":
-            olaylar.append(Olay("mac_bitti", simdi, harita, steamid=steamid))
+        if mac == "gameover":
+            bitir(harita)
 
         self.harita, self.mac_evresi, self.round_evresi = harita, mac, rnd
         return olaylar
@@ -154,4 +169,16 @@ def sunucu(port: int, token: str, izleyici: Izleyici, olay_geldi: Callable[[Olay
             pass
 
     # Tek iş parçacıklı: durumlar geliş sırasıyla işlenir (Izleyici sıraya bağlı).
-    return HTTPServer(("127.0.0.1", port), Isleyici)
+    return TekBaglanti(("127.0.0.1", port), Isleyici)
+
+
+class TekBaglanti(HTTPServer):
+    """Port başka süreçteyse açılmaz. Windows'ta SO_REUSEADDR (HTTPServer varsayılanı) aynı porta ikinci
+    bağlanmaya izin verir; iki canli.bat ya da arayüzün portu sessizce paylaşılırdı."""
+
+    allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()

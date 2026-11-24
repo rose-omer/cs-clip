@@ -96,9 +96,13 @@ def test_oturum_bul_uyan_kaydi_secer(tmp_path):
 
 
 class SahteSurec:
-    def __init__(self):
+    def __init__(self, returncode=None):
         self.stdin = io.StringIO()
         self.komut = None
+        self.returncode = returncode  # None: çalışıyor
+
+    def poll(self):
+        return self.returncode
 
     def wait(self, timeout=None):
         return 0
@@ -178,3 +182,68 @@ def test_kes_uyan_kayit_yoksa_hata(tmp_path, monkeypatch):
     cfg = dict(DEFAULTS, canli_klasoru=str(tmp_path))
     with pytest.raises(SystemExit, match="uyan kayıt yok"):
         canli.kes(tmp_path / "a.dem", cfg, Path("ffmpeg"))
+
+
+# --- ffmpeg'in kapanması, maç bitişi, adlar ---
+
+def kaydedici(tmp_path, surecler):
+    it = iter(surecler)
+    return canli.Kaydedici(Path("ffmpeg"), tmp_path, popen=lambda cmd, **_: next(it), saat=lambda: 100.0,
+                           baslangic_oku=lambda *a: 99.0)
+
+
+def test_ffmpeg_kendiliginden_kapanirsa_kayit_biter_ve_mac_boyunca_yeniden_denenmez(tmp_path, capsys):
+    s = SahteSurec()
+    k = kaydedici(tmp_path, [s, SahteSurec()])
+    f = k.baslat("de_dust2", "765")
+    f.with_suffix(".log").write_text("Cannot load nvcuda.dll\n", encoding="utf-8")
+    assert not k.denetle()  # çalışıyor
+    s.returncode = 1
+    assert k.denetle() and not k.aktif
+    assert "nvcuda" in capsys.readouterr().out
+    assert canli.oturum_oku(f)["bitis"] == 100.0
+    assert k.baslat("de_dust2", "765") is None  # aynı maçta yeniden denenmez
+    k.mac_bitti()
+    assert k.baslat("de_dust2", "765") is not None  # yeni maçta denenir
+
+
+def test_durdurma_yeni_oturumu_bozmaz(tmp_path):
+    """ffmpeg kapanırken yeni maç başlasa da başlangıç saati eski oturuma yazılır."""
+    eski_surec = SahteSurec()
+    k = kaydedici(tmp_path, [eski_surec, SahteSurec()])
+    eski = k.baslat("de_dust2", "765")
+
+    def bekle(timeout=None):  # ffmpeg kapanırken yeni maç başlıyor
+        k.baslat("de_mirage", "765")
+        return 0
+
+    eski_surec.wait = bekle
+    k.durdur()
+    assert canli.oturum_oku(eski)["video_baslangic"] == 99.0
+    yeni = k.dosya
+    assert yeni != eski and canli.oturum_oku(yeni)["video_baslangic"] is None and k.aktif
+
+
+def test_olay_isle_demo_kaydi_surerken_ekran_kaydi_acmaz(tmp_path):
+    k = kaydedici(tmp_path, [SahteSurec()])
+    o = canli.gsi.Olay("mac_basladi", 1.0, "de_dust2", steamid="765")
+    canli.olay_isle(o, k, kayit_suruyor=lambda: True)
+    assert not k.aktif
+    canli.olay_isle(o, k, kayit_suruyor=lambda: False)
+    assert k.aktif
+
+
+@pytest.mark.parametrize("harita,ad", [("de_dust2", "de_dust2"), ("workshop/123/de_x", "workshop_123_de_x"),
+                                       ("", "harita"), ("..", "harita")])
+def test_dosya_adi(harita, ad):
+    assert canli.dosya_adi(harita) == ad
+
+
+def test_oturum_bul_en_cok_roundu_kapsayani_secer(tmp_path):
+    # Maç iki kayda bölünmüş: kısa parçanın farkı biraz daha küçük olsa da uzun olan seçilir.
+    kisa = {no: t for no, t in kayit_roundlari().items() if no <= 3}
+    uzun = kayit_roundlari(bozuk=0.4)
+    canli.oturum_yaz(tmp_path / "kisa.json", oturum(video="kisa.mkv", roundlar=kisa))
+    canli.oturum_yaz(tmp_path / "uzun.json", oturum(video="uzun.mkv", roundlar=uzun))
+    f, _ = canli.oturum_bul(tmp_path, "de_dust2", DEMO)
+    assert f.name == "uzun.json"

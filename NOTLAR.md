@@ -188,3 +188,34 @@ Sonuç: NVENC değmez. Zamanın çoğu CS2 açılışı/yükleme ve kayıtta (ka
   - Gerçek demoyla eşleme (`round_freeze_end` + `total_rounds_played`).
   - Oyun içi FPS etkisi, tam ekran (exclusive) modda siyah kare.
   - `dshow` ses ve ses/görüntü uyumu.
+
+## 2026-11-24 — `canli-kayit` dalı incelemesi ve düzeltmeler
+- Bağımsız bir kod incelemesi yapıldı. Bulunan hatalar düzeltildi; her biri için test var:
+  - **GSI maç bitişi:** maçtan devre arasında (`intermission`) çıkınca `mac_bitti` gelmiyordu, kayıt menüde sürüyordu.
+    Artık canlıya geçmiş maçtan hangi evrede çıkılırsa çıkılsın maç bitiyor (`Izleyici.oynandi`).
+  - **Round başı:** maç ortasında gelen ilk durum round başı sayılıyordu (geç açılış, yeniden bağlanma). Artık yalnız
+    `freezetime → live` geçişi round başı sayılıyor.
+  - **ffmpeg'in kendiliğinden kapanması:** fark edilmiyordu. Bekçi 3 sn'de bir `poll()` yapıyor, günlüğü basıyor,
+    o maç yeniden denenmiyor.
+  - **`durdur()`:** kilit dışında `self.dosya`/`self.oturum` okuyordu. Artık yerel kopya kullanıyor.
+  - **Harita adı:** `workshop/…` adı dosya adını bozuyordu.
+  - **Eşleme:** maç bölünmüş kaydedildiyse en çok round'u kapsayan kayıt seçiliyor.
+  - **GSI portu:** `SO_EXCLUSIVEADDRUSE` ile açılıyor; ikinci `canli.bat` hata veriyor.
+  - **CSDM kaydı:** CSDM kaydı sürerken (ortak `kayit.kilit`) ekran kaydı açılmıyor.
+  - **Ekonomi farkı:** `round_start_equip_value` ile hesaplanıyor. Önceki `current_equip_value` kill anının değeriydi;
+    ölen oyuncunun değeri düşmüş olabilirdi. Alan okunamazsa daha kısa alan listesi deneniyor.
+  - **Puanlama:** collateral artık "hızlı" puanını da almıyor; wingman'de uzatma 17. round'dan başlıyor.
+  - **Önbellek:** `analyze.py` değişince de highlight önbelleği eskiyor.
+  - **Arayüz:**
+    - Sunucu yanıtındaki `<`, `>`, `"` dönüşümü `/api/ayarlar`'a uygulanmıyor; tırnaklı ayar bozulmuyor.
+    - `canli_ses` tırnakları atılıyor.
+    - Montaj isteğinde zaman aşımı yok.
+    - Reddedilen yüklemenin gövdesi okunuyor.
+    - "Aynı dosya" kararı bayt bayt karşılaştırmayla veriliyor.
+    - Kopan yükleme `.part` dosyası bırakmıyor.
+  - **Kurulum:** `kur.bat` artık GSI dosyasını yazıyor (`canli_gsi` adımı, `canli.py kur --kontrol` ile önce bakıyor).
+- **CI:** `ruff --select E9,F` `test_config.py`'deki çift içe aktarmada kırılmıştı; düzeltildi. Push öncesi
+  `.venv\Scripts\python -m ruff check --select E9,F .` çalıştır.
+- **Hâlâ denenmedi:**
+  - Gerçek CS2 GSI ve gerçek demo: `round_start_equip_value`, `attackerinair`, `health` değerleri.
+  - `ddagrab`'ın tam ekranda çalışması, FPS etkisi, `dshow` ses.

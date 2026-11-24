@@ -330,7 +330,7 @@ async function montajYap() {
     if (el) el.textContent = `${Math.floor((Date.now() - S.montajBas) / 1000)} sn · ${S.mjSec.tur === 'paylasim' ? 'video kodlanıyor' : 'klipler birleştiriliyor'}`;
   }, 500);
   try {
-    const r = await api('/api/en-iyi/montaj', { method: 'POST', body: JSON.stringify(oyuncu ? { ...mjGovde(adet), oyuncu } : mjGovde(adet)) });
+    const r = await api('/api/en-iyi/montaj', { method: 'POST', body: JSON.stringify(oyuncu ? { ...mjGovde(adet), oyuncu } : mjGovde(adet)), zamanAsimi: 0 });
     if (!r || !r.klip) throw new Error('Sunucudan geçersiz yanıt geldi.');
     if (S.ei) S.ei.montaj = r;
     S.montajYeni = true;

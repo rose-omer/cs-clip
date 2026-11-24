@@ -194,9 +194,11 @@ function demoOzet(id) {
 async function api(yol, secenek = {}) {
   if (ORNEK_MODU) return ornekApi(yol, secenek);
   let yanit;
-  // Zaman aşımı: ilk analiz ve montaj dakikalar sürebilir; sunucu takılırsa sayfa sonsuza dek beklemesin.
+  // Zaman aşımı: ilk analiz dakikalar sürebilir; sunucu takılırsa sayfa sonsuza dek beklemesin.
+  // secenek.zamanAsimi === 0: sınır yok (montaj: süresi klip sayısına bağlı, sunucu kendi içinde iş yapıyor).
   const iptal = new AbortController();
-  const sure = setTimeout(() => iptal.abort(), API_ZAMAN_ASIMI_MS);
+  const sinir = secenek.zamanAsimi ?? API_ZAMAN_ASIMI_MS;
+  const sure = sinir ? setTimeout(() => iptal.abort(), sinir) : null;
   try {
     yanit = await fetch(yol, {
       method: secenek.method || 'GET',
@@ -207,7 +209,7 @@ async function api(yol, secenek = {}) {
     });
   } catch {
     clearTimeout(sure);
-    if (iptal.signal.aborted) throw new Error(`Sunucu ${API_ZAMAN_ASIMI_MS / 60000} dakikadır yanıt vermiyor; arayüz sunucusunu yeniden başlatmayı dene.`);
+    if (iptal.signal.aborted) throw new Error(`Sunucu ${sinir / 60000} dakikadır yanıt vermiyor; arayüz sunucusunu yeniden başlatmayı dene.`);
     throw new Error('Sunucuya ulaşılamadı. cs-klip sunucusu çalışıyor mu?');
   }
   let metin;
@@ -227,7 +229,8 @@ async function api(yol, secenek = {}) {
     throw h;
   }
   if (veri === null && metin) throw new Error('Sunucudan geçersiz yanıt geldi.');
-  return zararsiz(veri);
+  // Ayarlar forma olduğu gibi gelmeli (form esc() ile basar); değişen değer kaydedilince dosyayı bozardı.
+  return yol.startsWith('/api/ayarlar') ? veri : zararsiz(veri);
 }
 const API_ZAMAN_ASIMI_MS = 5 * 60 * 1000;
 // 404: sunucu bu ucu tanımıyor (arayüz güncellendi, sunucu eski sürümle açık kaldı).

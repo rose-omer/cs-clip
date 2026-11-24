@@ -125,7 +125,8 @@ def validate(data, check_paths: bool = True) -> tuple[dict, dict]:
             elif len(value.strip()) > TEXTS[key]:
                 errors[key] = f"En fazla {TEXTS[key]} karakter."
             else:
-                clean[key] = value.strip()
+                # Ses cihazı adı tırnakla yapıştırılabilir ("Stereo Mix (…)"); ffmpeg'e tırnaksız gider.
+                clean[key] = clean_path(value) if key == "canli_ses" else value.strip()
         elif key == "kayit_crf":
             if isinstance(value, str) and value.strip().isdigit():
                 value = int(value)

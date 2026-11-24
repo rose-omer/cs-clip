@@ -9,7 +9,7 @@
       { k: 'oyuncu', etiket: 'Oyuncu adı', tur: 'metin', ipucu: 'Demodaki adın ya da SteamID64. Değişirse maçlar yeniden analiz edilir.' },
     ] },
     { no: '02', baslik: 'Klipler', ek: 'Hangi anlar, ne kadar uzun', alanlar: [
-      { k: 'min_skor', etiket: 'En düşük puan', tur: 'sayi', min: 0, max: 100, adim: 0.5, ipucu: 'Bu puanın altındaki anlar kaydedilmez (2K = 3, 3K = 6, ACE = 16).' },
+      { k: 'min_skor', etiket: 'En düşük puan', tur: 'sayi', min: 0, max: 100, adim: 0.5, ipucu: 'Bu puanın altındaki anlar kaydedilmez. Taban: 2K = 3, 3K = 6, ACE = 16; üstüne clutch, HS, açılış, ekonomi farkı gibi ekler gelir (kartta "Puan dökümü").' },
       { k: 'mac_basi_en_fazla', etiket: 'Maç başına en fazla', tur: 'sayi', min: 0, max: 50, adim: 1, ipucu: '0 = eşiği geçen hepsi.' },
       { k: 'once_sn', etiket: 'İlk kill\'den önce (sn)', tur: 'sayi', min: 0, max: 30, adim: 0.5 },
       { k: 'sonra_sn', etiket: 'Son kill\'den sonra (sn)', tur: 'sayi', min: 0, max: 30, adim: 0.5 },

@@ -27,6 +27,7 @@ class Makine:
         self.paketler = False
         self.calisiyor = False
         self.db_var = False
+        self.gsi = False  # CS2 cfg klasöründe GSI dosyası var mı (canli.py kur)
         self.komutlar: list[list[str]] = []
         self.parola = None
         self.pg_dir = tmp / "pg" / "17" / "bin"
@@ -51,6 +52,11 @@ class Makine:
             out = "" if self.paketler else "\n".join(cmd[3:])
         elif cmd[1:3] == ["-m", "pytest"]:
             pass
+        elif cmd[1] == "canli.py":
+            if "--kontrol" in cmd:
+                code = 0 if self.gsi else 1
+            else:
+                self.gsi = True
         elif exe == "winget":
             paket = cmd[cmd.index("--id") + 1]
             if paket == kurulum.FFMPEG_WINGET:
@@ -78,7 +84,8 @@ class Makine:
     def degistiren(self):
         """Durumu değiştiren komutlar (yoklamalar hariç)."""
         oku = {"pg_isready.exe", "psql.exe"}
-        return [c for c in self.komutlar if Path(c[0]).name.lower() not in oku and c[1:2] != ["-c"]]
+        return [c for c in self.komutlar
+                if Path(c[0]).name.lower() not in oku and c[1:2] != ["-c"] and "--kontrol" not in c]
 
 
 @pytest.fixture
@@ -140,6 +147,7 @@ def test_fresh_install_then_rerun_is_noop(ortam, capsys):
     assert json.loads((root / "ayarlar.json").read_text(encoding="utf-8"))["oyuncu"] == "Arkadas"
     data = ortam["lad"] / "csdm-pg" / "data"
     assert (data / "PG_VERSION").is_file() and m.calisiyor and m.db_var
+    assert m.gsi  # canlı kayıt için CS2 GSI dosyası yazıldı
     s = json.loads((home / ".csdm" / "settings.json").read_text(encoding="utf-8"))
     sablon = json.loads(kurulum.TEMPLATE.read_text(encoding="utf-8"))
     assert set(s) == set(sablon) and s["schemaVersion"] == sablon["schemaVersion"]

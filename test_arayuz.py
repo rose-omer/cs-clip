@@ -512,11 +512,36 @@ def yukle(url, ad, govde):
 def test_ayni_adla_yukleme(server):
     url, _ = server
     assert yukle(url, "m.dem", b"x" * 10)[0] == 200
-    assert yukle(url, "m.dem", b"y" * 10) == (200, {"id": "m", "zaten_var": True})  # aynı dosya yeniden
-    kod, govde = yukle(url, "m.dem", b"z" * 20)
-    assert kod == 409 and "zaten var" in govde["hata"]
+    assert yukle(url, "m.dem", b"x" * 10) == (200, {"id": "m", "zaten_var": True})  # aynı dosya yeniden
+    for govde in (b"y" * 10, b"z" * 20):  # aynı boyutta ya da farklı boyutta başka içerik
+        kod, yanit = yukle(url, "m.dem", govde)
+        assert kod == 409 and "zaten var" in yanit["hata"]
     assert (arayuz.UPLOADS / "m.dem").read_bytes() == b"x" * 10
     assert not list(arayuz.UPLOADS.glob("*.part"))
+
+
+def test_reddedilen_buyuk_yuklemenin_govdesi_okunur(server):
+    url, _ = server
+    kod, yanit = yukle(url, "virus.exe", b"x" * (3 * 1024 * 1024))
+    assert kod == 400 and "yüklenebilir" in yanit["hata"]
+
+
+def test_kopan_yukleme_yarim_dosya_birakmaz(app):
+    a, _, _ = app
+
+    class Kopan:
+        def __init__(self):
+            self.n = 0
+
+        def read(self, k):
+            self.n += 1
+            if self.n > 1:
+                raise ConnectionResetError("tarayıcı iptal etti")
+            return b"x" * k
+
+    with pytest.raises(ConnectionResetError):
+        a.upload("b.dem", 5 * arayuz.CHUNK, Kopan())
+    assert not list(arayuz.UPLOADS.glob("*.part")) and not (arayuz.UPLOADS / "b.dem").exists()
 
 
 def test_yukleme_adinda_iki_nokta_reddedilir(server):

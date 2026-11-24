@@ -24,7 +24,7 @@ KILL_BONUSES = [
 # Bağlam ölçütleri (2. sürüm). Etiketleri `labels`'a girmez (klip adları ondan üretilir); `ozellikler`'e girer.
 # Sütun yoksa (eski demoparser çıktısı, testler) ölçüt atlanır.
 OPENING_POINTS = 1.0  # round'un ilk kill'i
-ECO_POINTS = 1.0  # kill başı: rakibin ekipmanı benimkinin ECO_RATIO katı ve en az ECO_MIN_VALUE
+ECO_POINTS = 1.0  # kill başı: rakibin round başı ekipmanı benimkinin ECO_RATIO katı ve en az ECO_MIN_VALUE
 ECO_RATIO = 2.5
 ECO_MIN_VALUE = 3000
 LOW_HP = 20
@@ -34,7 +34,7 @@ UTILITY_WEAPONS = ("hegrenade", "inferno", "molotov", "incgrenade")
 UTILITY_POINTS = 2.0  # kill başı: bomba ya da molotof
 ZEUS_POINTS = 3.0  # kill başı
 COLLATERAL_POINTS = 3.0  # aynı tick'te ikinci (ve sonraki) kill
-REGULATION_ROUNDS = 24  # MR12: 24'ten sonrası uzatma
+REGULATION_ROUNDS = {2: 16}  # takım boyu -> normal süre round sayısı (wingman MR8); yoksa 24 (MR12)
 OVERTIME_POINTS = 1.0
 MATCH_WINNER_POINTS = 2.0  # maçın son round'u, benim takımım kazandı
 
@@ -84,15 +84,15 @@ def _has(df: pd.DataFrame, *columns: str) -> bool:
 
 
 def _context(group: pd.DataFrame, round_kills: pd.DataFrame, steamid: str, round_no: int,
-             won: bool, last_round: bool) -> list[tuple[str, float]]:
+             won: bool, last_round: bool, team_size: int = TEAM_SIZE) -> list[tuple[str, float]]:
     """Bağlam ölçütleri: [(özellik etiketi, puan)]. group: oyuncunun bu round'daki geçerli kill'leri."""
     out: list[tuple[str, float]] = []
     enemy_kills = round_kills[round_kills["attacker_team_num"] != round_kills["user_team_num"]]
     if not enemy_kills.empty and str(enemy_kills["attacker_steamid"].iloc[0]) == steamid:
         out.append(("açılış", OPENING_POINTS))
-    if _has(group, "attacker_current_equip_value", "user_current_equip_value"):
-        mine = pd.to_numeric(group["attacker_current_equip_value"], errors="coerce")
-        theirs = pd.to_numeric(group["user_current_equip_value"], errors="coerce")
+    if _has(group, "attacker_round_start_equip_value", "user_round_start_equip_value"):
+        mine = pd.to_numeric(group["attacker_round_start_equip_value"], errors="coerce")
+        theirs = pd.to_numeric(group["user_round_start_equip_value"], errors="coerce")
         eco = int(((theirs >= ECO_MIN_VALUE) & (theirs >= ECO_RATIO * mine)).sum())
         if eco:
             out.append(("ekonomi farkı", ECO_POINTS * eco))
@@ -114,7 +114,7 @@ def _context(group: pd.DataFrame, round_kills: pd.DataFrame, steamid: str, round
     collateral = int(group["tick"].duplicated().sum())
     if collateral:
         out.append(("collateral", COLLATERAL_POINTS * collateral))
-    if round_no > REGULATION_ROUNDS:
+    if round_no > REGULATION_ROUNDS.get(team_size, 24):
         out.append(("uzatma", OVERTIME_POINTS))
     if won and last_round:
         out.append(("maçı bitirdi", MATCH_WINNER_POINTS))
@@ -185,12 +185,13 @@ def find_highlights(
             points.append(["bıçak", 3 * knife])
             labels.append("bıçak")
 
-        fast = int((group["tick"].diff() <= FAST_KILL_SECONDS * TICKRATE).sum())
+        gap = group["tick"].diff()
+        fast = int(((gap > 0) & (gap <= FAST_KILL_SECONDS * TICKRATE)).sum())  # aynı tick: collateral sayılır
         if fast:
             points.append(["hızlı", fast])
             labels.append("hızlı")
 
-        context = _context(group, round_kills, steamid, int(round_played) + 1, won, last_round)
+        context = _context(group, round_kills, steamid, int(round_played) + 1, won, last_round, team_size)
         points += [[label, pts] for label, pts in context]
         score = float(sum(pts for _, pts in points))
 

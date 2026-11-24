@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from config import DEFAULTS, load_config, validate
+from config import DEFAULTS, load_config
 
 
 def test_missing_file_gives_defaults(tmp_path):
@@ -99,3 +99,8 @@ def test_validate_yeni_ayarlar(veri, hatali):
 def test_validate_her_varsayilan_ayari_kabul_eder():
     clean, errors = validate(dict(DEFAULTS), check_paths=False)
     assert errors == {} and set(clean) == set(DEFAULTS)  # hiçbir ayar sessizce atılmaz
+
+
+def test_ses_cihazi_tirnaklari_atilir():
+    clean, errors = validate({"canli_ses": ' "Stereo Mix (Realtek(R) Audio)" '}, check_paths=False)
+    assert errors == {} and clean["canli_ses"] == "Stereo Mix (Realtek(R) Audio)"

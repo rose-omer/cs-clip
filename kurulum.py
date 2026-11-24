@@ -8,7 +8,7 @@ Her adım önce durumu yoklar; zaten hazırsa atlar, bu yüzden tekrar tekrar ç
 
 Adımlar: sanal ortam, paketler, ayarlar.json, FFmpeg, PostgreSQL programları, CS Demo Manager,
 veritabanı klasörü (initdb --locale=C: Türkçe yerel ayarda kurucunun çökmesini aşar), veritabanını başlatma,
-csdm veritabanı, CSDM ayarları (~/.csdm/settings.json), PATH, testler.
+csdm veritabanı, CSDM ayarları (~/.csdm/settings.json), canlı kayıt GSI dosyası, PATH, testler.
 """
 
 import argparse
@@ -488,6 +488,28 @@ class Kurulum:
             print(f"    eski dosya yedeklenir: {self.csdm_settings.name}.yedek")
         self.yaz(self.csdm_settings, json.dumps(data, ensure_ascii=False, indent=2), yedek=True)
 
+    def canli_gsi(self) -> None:
+        """Canlı kayıt için CS2'nin cfg klasörüne GSI dosyası (canli.py kur; sanal ortamın paketlerini ister)."""
+        self.adim("Canlı kayıt: CS2 GSI dosyası")
+        komut = [self.venv_py, "canli.py", "--ayarlar", self.ayarlar, "kur"]
+        if not self.venv_py.is_file():  # provada sanal ortam henüz yok
+            self.calistir(komut, cwd=self.root)
+            return
+        r = self.yokla(komut + ["--kontrol"], cwd=self.root)
+        cikti = (r.stdout + r.stderr).strip().splitlines()
+        if r.returncode == 0:
+            self.tamam(cikti[0] if cikti else "GSI dosyası güncel.")
+            return
+        if r.returncode != 1:  # CS2 bulunamadı: CSDM kaydı yine çalışır, yalnız canlı kayıt olmaz
+            self.uyari((cikti[-1] if cikti else "GSI dosyası denetlenemedi.") + " CS2 kurulunca: canli.bat kur")
+            return
+        self.yap("CS2 cfg klasörüne yazılıyor")
+        r = self.calistir(komut, cwd=self.root, capture_output=True, text=True, errors="replace")
+        if r is not None and r.returncode != 0:
+            raise KurulumHatasi("GSI dosyası yazılamadı: " + (r.stdout + r.stderr).strip())
+        if r is not None:
+            self.tamam("Yazıldı. CS2 açıksa kapatıp yeniden aç.")
+
     def path_ayari(self) -> None:
         self.adim("PATH (psql)")
         if not self.pg_bin:
@@ -512,8 +534,8 @@ class Kurulum:
             raise KurulumHatasi("Testler geçmedi. Çıktıyı geliştiriciye gönder.")
 
     ADIMLAR = ("sanal_ortam", "paketler", "ayar_dosyasi", "ffmpeg_kur", "postgresql_kur", "csdm_kur",
-               "veritabani_klasoru", "veritabani_baslat", "veritabani_olustur", "csdm_ayarlari", "path_ayari",
-               "testleri_calistir")
+               "veritabani_klasoru", "veritabani_baslat", "veritabani_olustur", "csdm_ayarlari", "canli_gsi",
+               "path_ayari", "testleri_calistir")
     # bu adımlar başarısız olursa sonrakiler anlamsız
     ZORUNLU = {"sanal_ortam", "paketler"}
     PG_ADIMLARI = {"veritabani_baslat", "veritabani_olustur", "csdm_ayarlari"}

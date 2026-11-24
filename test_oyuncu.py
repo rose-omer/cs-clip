@@ -278,28 +278,35 @@ def test_team_size_izleyicileri_saymaz():
     assert analyze.team_size(pd.DataFrame({"steamid": ["1"]})) == analyze.TEAM_SIZE
 
 
-def test_kills_baglam_alanlari_okunamazsa_eski_alanlar():
+@pytest.mark.parametrize("okunamayan,beklenen", [
+    ({"round_start_equip_value"}, [analyze.CONTEXT_PROPS, ["team_num", "health"]]),  # yalnız ekonomi atlanır
+    ({"round_start_equip_value", "health"}, analyze.PROP_FALLBACKS),  # eski alanlarla devam
+])
+def test_kills_baglam_alanlari_okunamazsa_kisa_liste(okunamayan, beklenen):
     class Parser:
         def __init__(self):
             self.istekler = []
 
         def parse_event(self, name, player=(), other=()):
             self.istekler.append(list(player))
-            if "health" in player:
+            if okunamayan & set(player):
                 raise Exception("unknown prop")
             return "kills"
 
     p = Parser()
     assert analyze._kills(p) == "kills"
-    assert p.istekler == [analyze.CONTEXT_PROPS, ["team_num"]]
+    assert p.istekler == beklenen
 
 
 def test_puanlama_kodu_degisince_onbellek_eskir(tmp_path, monkeypatch):
-    demo, hl, kod = tmp_path / "a.dem", tmp_path / "a.highlights.json", tmp_path / "highlights.py"
-    for f, t in ((demo, 1000), (kod, 2000), (hl, 1500)):
+    demo, hl = tmp_path / "a.dem", tmp_path / "a.highlights.json"
+    puan, analiz = tmp_path / "highlights.py", tmp_path / "analyze.py"
+    for f, t in ((demo, 1000), (puan, 2000), (analiz, 1200), (hl, 1500)):
         f.write_text("x", encoding="utf-8")
         os.utime(f, (t, t))
-    monkeypatch.setattr(arayuz, "SCORING_CODE", kod)
+    monkeypatch.setattr(arayuz, "SCORING_CODE", (puan, analiz))
     assert not arayuz.fresh(hl, demo)  # puanlama kodundan eski
     os.utime(hl, (2500, 2500))
     assert arayuz.fresh(hl, demo)
+    os.utime(analiz, (3000, 3000))  # demodan okunan alanlar değişti
+    assert not arayuz.fresh(hl, demo)

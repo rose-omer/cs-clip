@@ -41,9 +41,11 @@ def highlights_path(demo: Path, steamid: str | None = None) -> Path:
     return demo.with_suffix(f".highlights.{steamid}.json")
 
 
-# Bağlam puanları için (highlights._context): kill anında can ve ekipman değeri. Bu demoda okunamazsa
-# yalnız team_num istenir; ilgili ölçütler atlanır.
-CONTEXT_PROPS = ["team_num", "health", "current_equip_value"]
+# Bağlam puanları için (highlights._context): kill anında can, round başındaki ekipman değeri. Round başı değeri
+# kullanılır: ölen oyuncunun o anki değeri düşmüş, saldırganınki yerden alınan silahla değişmiş olabilir.
+# Bir alan bu demoda okunamazsa daha kısa liste denenir; ilgili ölçütler atlanır.
+CONTEXT_PROPS = ["team_num", "health", "round_start_equip_value"]
+PROP_FALLBACKS = [CONTEXT_PROPS, ["team_num", "health"], ["team_num"]]
 
 
 def team_size(players) -> int:
@@ -55,10 +57,12 @@ def team_size(players) -> int:
 
 
 def _kills(parser):
-    try:
-        return parser.parse_event("player_death", player=CONTEXT_PROPS, other=["total_rounds_played"])
-    except Exception:  # noqa: BLE001 — demoparser2 bilinmeyen alan için genel Exception atar
-        return parser.parse_event("player_death", player=["team_num"], other=["total_rounds_played"])
+    for props in PROP_FALLBACKS[:-1]:
+        try:
+            return parser.parse_event("player_death", player=props, other=["total_rounds_played"])
+        except Exception:  # noqa: BLE001 — demoparser2 bilinmeyen alan için genel Exception atar
+            continue
+    return parser.parse_event("player_death", player=PROP_FALLBACKS[-1], other=["total_rounds_played"])
 
 
 def _load(demo: Path):

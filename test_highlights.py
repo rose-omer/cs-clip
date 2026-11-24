@@ -144,8 +144,8 @@ def test_acilis_yalniz_roundun_ilk_killi():
 
 
 def test_ekonomi_farki():
-    eco = kill(1, 1000, attacker_current_equip_value=700, user_current_equip_value=4700)
-    esit = kill(1, 1100, victim="e2", attacker_current_equip_value=700, user_current_equip_value=1500)
+    eco = kill(1, 1000, attacker_round_start_equip_value=700, user_round_start_equip_value=4700)
+    esit = kill(1, 1100, victim="e2", attacker_round_start_equip_value=700, user_round_start_equip_value=1500)
     h = one([eco, esit])
     assert ["ekonomi farkı", 1.0] in h["puanlar"]
 
@@ -165,6 +165,7 @@ def test_olu_oyuncunun_cani_az_can_sayilmaz():
 def test_collateral():
     h = one([kill(1, 1000), kill(1, 1000, victim="e2")])
     assert ["collateral", 3.0] in h["puanlar"]
+    assert "hızlı" not in h["labels"]  # aynı tick'teki ikinci kill bir kez puanlanır
 
 
 def test_uzatma_ve_maci_bitiren_round():
@@ -183,3 +184,8 @@ def test_wingman_clutch_takim_boyuna_gore():
     ends = pd.DataFrame([{"tick": 3000, "winner": "CT"}])
     assert "1v2 clutch" in one(rows, round_ends=ends, team_size=2)["labels"]
     assert not any("clutch" in lb for lb in one(rows, round_ends=ends)["labels"])  # 5v5'te 4 kişi hâlâ sağ
+
+
+def test_wingman_uzatmasi_17_round():
+    assert "uzatma" in one([kill(16, 2000)], team_size=2)["ozellikler"]  # round 17
+    assert "uzatma" not in one([kill(16, 2000)])["ozellikler"]  # 5v5'te round 17 normal süre

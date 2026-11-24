@@ -27,6 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 import gsi
+import otomatik
 from analyze import analyze_player, player_tag
 from config import CANLI_KODLAYICILAR, load_config
 from demofile import find_csgo_dir, open_demo
@@ -41,6 +42,7 @@ KODLAYICILAR = CANLI_KODLAYICILAR
 KALITE = ["-preset", "p4", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-maxrate", "40M", "-bufsize", "80M"]
 DURDURMA_GECIKMESI = 8  # maç bitince son kill'in sonrası da girsin
 SESSIZLIK_SN = 60  # bu kadar süre GSI gelmezse (CS2 kapandı/çöktü) kayıt durur
+BEKCI_SN = 3  # ffmpeg'in kendiliğinden kapanıp kapanmadığına bu aralıkla bakılır
 GSI_GECIKME = 0.1  # cfg'deki buffer: olay bu kadar geç gelir
 UYUM_ESIGI = 2.0  # demo ile kayıt arasındaki round süresi farkının ortancası (sn); üstü başka maç sayılır
 SURUM = 1
@@ -109,18 +111,21 @@ class Kaydedici:
         self.surec = None
         self.oturum: dict = {}
         self.dosya: Path | None = None
+        self.basarisiz = False  # ffmpeg bu maçta kendiliğinden kapandı: maç bitene kadar yeniden denenmez
         self.kilit = threading.Lock()
 
     @property
     def aktif(self) -> bool:
         return self.surec is not None
 
-    def baslat(self, harita: str, steamid: str) -> Path:
+    def baslat(self, harita: str, steamid: str) -> Path | None:
         with self.kilit:
             if self.surec is not None:
                 return self.dosya
+            if self.basarisiz:
+                return None
             self.klasor.mkdir(parents=True, exist_ok=True)
-            ad = f"{datetime.now():%Y%m%d-%H%M%S}_{harita or 'harita'}"
+            ad = f"{datetime.now():%Y%m%d-%H%M%S}_{dosya_adi(harita)}"
             video, self.dosya = self.klasor / f"{ad}.mkv", self.klasor / f"{ad}.json"
             self.oturum = {"surum": SURUM, "video": video.name, "harita": harita, "steamid": steamid,
                            "baslangic": self.saat(), "video_baslangic": None, "bitis": None, "roundlar": {}}
@@ -141,26 +146,62 @@ class Kaydedici:
             self.oturum["roundlar"][no] = zaman - GSI_GECIKME
             oturum_yaz(self.dosya, self.oturum)
 
+    def denetle(self) -> bool:
+        """ffmpeg kendiliğinden kapandıysa (NVENC yok, ses cihazı yanlış…) kaydı bitirip hatayı yazar.
+
+        True: kayıt kapandı. Bekçi birkaç saniyede bir çağırır; yoksa maç boyunca boş kayıt "sürer".
+        """
+        with self.kilit:
+            surec = self.surec
+            if surec is None or surec.poll() is None:
+                return False
+            self.surec, dosya, oturum = None, self.dosya, self.oturum
+            self.basarisiz = True
+            oturum["bitis"] = self.saat()
+            oturum_yaz(dosya, oturum)
+        print(f"  ! Kayıt durdu: ffmpeg kapandı (çıkış kodu {surec.returncode}). Bu maç kaydedilmeyecek."
+              + gunluk_ozeti(dosya))
+        return True
+
+    def mac_bitti(self) -> None:
+        """Yeni maçta ffmpeg yeniden denenebilir."""
+        with self.kilit:
+            self.basarisiz = False
+
     def durdur(self, dosya: Path | None = None) -> None:
         """Kaydı kapatır. dosya verilirse yalnız o oturum hâlâ sürüyorsa (gecikmeli durdurma yeni maçı kesmesin)."""
         with self.kilit:
             if self.surec is None or (dosya is not None and dosya != self.dosya):
                 return
-            surec, self.surec = self.surec, None
-            self.oturum["bitis"] = self.saat()
-            oturum_yaz(self.dosya, self.oturum)
+            # Yerel kopyalar: ffmpeg beklenirken yeni maç başlarsa self.dosya / self.oturum değişir.
+            surec, self.surec, dosya, oturum = self.surec, None, self.dosya, self.oturum
+            oturum["bitis"] = self.saat()
+            oturum_yaz(dosya, oturum)
         try:
             surec.stdin.write("q")  # ffmpeg'i düzgün kapatır; mkv yarıda kesilse de okunur
             surec.stdin.flush()
             surec.wait(timeout=15)
         except (OSError, ValueError, subprocess.TimeoutExpired):
             surec.kill()
-        video = self.dosya.with_name(self.oturum["video"])
-        self.oturum["video_baslangic"] = self.baslangic_oku(self.ffmpeg, video)
-        oturum_yaz(self.dosya, self.oturum)
-        gunluk = self.dosya.with_suffix(".log")
-        hata = gunluk.read_text(encoding="utf-8", errors="replace").strip() if gunluk.exists() else ""
-        print(f"Kayıt bitti: {video}" + (f"\n  ffmpeg: {hata}" if hata else ""))
+        video = dosya.with_name(oturum["video"])
+        oturum["video_baslangic"] = self.baslangic_oku(self.ffmpeg, video)
+        oturum_yaz(dosya, oturum)
+        print(f"Kayıt bitti: {video}" + gunluk_ozeti(dosya))
+
+
+def dosya_adi(harita: str) -> str:
+    """Harita adından dosya adı: workshop/123/de_x -> workshop_123_de_x."""
+    return re.sub(r"[^\w.-]+", "_", harita).strip("._") or "harita"
+
+
+def gunluk_ozeti(oturum_dosyasi: Path, satir: int = 5) -> str:
+    """ffmpeg günlüğünün son satırları (boşsa boş metin)."""
+    f = Path(oturum_dosyasi).with_suffix(".log")
+    try:
+        son = f.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-satir:]
+    except OSError:
+        return ""
+    return "".join(f"\n  ffmpeg: {s}" for s in son)
 
 
 def izle(cfg: dict, ffmpeg: Path, csgo_dir: Path, sure: float = 0) -> None:
@@ -171,22 +212,17 @@ def izle(cfg: dict, ffmpeg: Path, csgo_dir: Path, sure: float = 0) -> None:
     kaydedici = Kaydedici(ffmpeg, Path(cfg["canli_klasoru"]), cfg["canli_fps"], cfg["canli_kodlayici"],
                           cfg["canli_ses"])
     izleyici = gsi.Izleyici()
-
-    def olay_geldi(o: gsi.Olay) -> None:
-        if o.tur in ("mac_basladi", "round_basladi") and not kaydedici.aktif:
-            kaydedici.baslat(o.harita, o.steamid)
-        if o.tur == "round_basladi":
-            print(f"  R{o.round:02d} başladı")
-            kaydedici.round_basladi(o.round, o.zaman)
-        elif o.tur == "mac_bitti":
-            threading.Timer(DURDURMA_GECIKMESI, kaydedici.durdur, args=(kaydedici.dosya,)).start()
-
-    srv = gsi.sunucu(cfg["canli_port"], token, izleyici, olay_geldi)
+    try:
+        srv = gsi.sunucu(cfg["canli_port"], token, izleyici, lambda o: olay_isle(o, kaydedici))
+    except OSError as e:
+        raise SystemExit(f"GSI portu {cfg['canli_port']} açılamadı ({e}). canli.bat zaten açık olabilir; "
+                         "değilse ayarlardan canli_port'u değiştirip canli.bat kur çalıştır.")
     baslangic = time.time()
 
     def bekci() -> None:
         while True:
-            time.sleep(5)
+            time.sleep(BEKCI_SN)
+            kaydedici.denetle()
             if kaydedici.aktif and izleyici.son_durum and time.time() - izleyici.son_durum > SESSIZLIK_SN:
                 print("  CS2'den haber yok; kayıt durduruldu.")
                 kaydedici.durdur()
@@ -203,6 +239,27 @@ def izle(cfg: dict, ffmpeg: Path, csgo_dir: Path, sure: float = 0) -> None:
     finally:
         srv.server_close()
         kaydedici.durdur()
+
+
+def olay_isle(o: gsi.Olay, kaydedici: Kaydedici, kayit_suruyor=None) -> None:
+    """GSI olayına göre kaydı açar, round saatini yazar, maç bitince kaydı kapatır.
+
+    CSDM ile demo kaydı sürerken (arayüz ya da otomatik kuyruk; ortak kayıt kilidi) CS2 demoyu oynatır ve GSI
+    yine durum gönderir: o sırada ekran kaydı açılmaz.
+    """
+    if kayit_suruyor is None:
+        kayit_suruyor = lambda: otomatik.kilit_dolu(otomatik.KILIT)  # noqa: E731
+    if o.tur == "mac_bitti":
+        kaydedici.mac_bitti()
+        threading.Timer(DURDURMA_GECIKMESI, kaydedici.durdur, args=(kaydedici.dosya,)).start()
+        return
+    if not kaydedici.aktif:
+        if kayit_suruyor():
+            return
+        kaydedici.baslat(o.harita, o.steamid)
+    if o.tur == "round_basladi" and kaydedici.aktif:  # kayıt yoksa (ffmpeg kapandı) round yazılmaz
+        print(f"  R{o.round:02d} başladı")
+        kaydedici.round_basladi(o.round, o.zaman)
 
 
 # --- demo ile eşleme ve kesim ---
@@ -228,7 +285,10 @@ def uyum(kayit_roundlari: dict[int, float], demo_roundlari: dict[int, int]) -> t
 
 
 def oturum_bul(klasor: Path, harita: str, demo_roundlari: dict[int, int]) -> tuple[Path, dict] | None:
-    """Demoya uyan kayıt: aynı harita ve round süreleri en yakın olan (en az 2 round, fark UYUM_ESIGI altında)."""
+    """Demoya uyan kayıt: aynı harita, round süreleri uyuyor (en az 2 karşılaştırma, fark UYUM_ESIGI altında).
+
+    Birden çok kayıt uyarsa (maç bölünmüş kaydedilmiş) en çok round'u kapsayan seçilir, eşitlikte farkı küçük olan.
+    """
     adaylar = []
     for f in sorted(Path(klasor).glob("*.json")):
         o = oturum_oku(f)
@@ -236,7 +296,7 @@ def oturum_bul(klasor: Path, harita: str, demo_roundlari: dict[int, int]) -> tup
             continue
         fark, n = uyum(o["roundlar"], demo_roundlari)
         if n >= 2 and fark <= UYUM_ESIGI:
-            adaylar.append((fark, -n, f, o))
+            adaylar.append((-n, fark, f, o))
     if not adaylar:
         return None
     _, _, f, o = min(adaylar, key=lambda a: a[:2])
@@ -318,7 +378,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Canlı kayıt: oynarken kaydet, demoyla en iyi anları kes")
     ap.add_argument("--ayarlar", type=Path, default=Path(__file__).with_name("ayarlar.json"))
     alt = ap.add_subparsers(dest="komut", required=True)
-    alt.add_parser("kur", help="CS2 cfg klasörüne GSI dosyasını yazar")
+    p_kur = alt.add_parser("kur", help="CS2 cfg klasörüne GSI dosyasını yazar")
+    p_kur.add_argument("--kontrol", action="store_true",
+                       help="yazmadan bak: güncelse çıkış 0, yazılması gerekiyorsa 1, CS2 yoksa 2")
     p_izle = alt.add_parser("izle", help="maçları kaydeder (Ctrl+C ile çık)")
     p_izle.add_argument("--sure", type=float, default=0, help="bu kadar saniye sonra çık (deneme)")
     p_kes = alt.add_parser("kes", help="demonun en iyi anlarını kayıttan keser")
@@ -329,9 +391,14 @@ def main() -> None:
 
     cfg = load_config(args.ayarlar)
     csgo_dir = Path(cfg["csgo_klasoru"]) if cfg["csgo_klasoru"] else find_csgo_dir()
-    if args.komut in ("kur", "izle") and csgo_dir is None:
-        raise SystemExit("CS2 klasörü bulunamadı. ayarlar.json → csgo_klasoru (…\\game\\csgo).")
+    if args.komut in ("kur", "izle") and (csgo_dir is None or not (csgo_dir / "cfg").is_dir()):
+        print("CS2 klasörü bulunamadı. ayarlar.json → csgo_klasoru (…\\game\\csgo).", file=sys.stderr)
+        raise SystemExit(2)
     if args.komut == "kur":
+        if args.kontrol:
+            guncel = gsi.cfg_guncel(csgo_dir, cfg["canli_port"])
+            print(f"GSI dosyası {'güncel' if guncel else 'yazılmalı'}: {gsi.cfg_yolu(csgo_dir)}")
+            raise SystemExit(0 if guncel else 1)
         f = gsi.cfg_yaz(csgo_dir, cfg["canli_port"])
         print(f"GSI dosyası yazıldı: {f}\nCS2 açıksa kapatıp yeniden aç.")
         return

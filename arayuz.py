@@ -5,6 +5,7 @@ Yalnız bu bilgisayardan erişilir (127.0.0.1). Sayfa arayuz/ klasöründen sunu
 """
 
 import argparse
+import contextlib
 import json
 import mimetypes
 import os
@@ -41,7 +42,8 @@ CHUNK = 1 << 20
 LOG_LINES = 40
 
 
-SCORING_CODE = ROOT / "highlights.py"
+# Highlight listesini üreten kod: biri değişince (puan ölçütü, demodan okunan alanlar) önbellek eskir.
+SCORING_CODE = (ROOT / "highlights.py", ROOT / "analyze.py")
 
 
 def fresh(f: Path, demo: Path) -> bool:
@@ -49,7 +51,7 @@ def fresh(f: Path, demo: Path) -> bool:
     if not f.exists():
         return False
     mtime = f.stat().st_mtime
-    return mtime >= demo.stat().st_mtime and mtime >= SCORING_CODE.stat().st_mtime
+    return mtime >= demo.stat().st_mtime and all(mtime >= c.stat().st_mtime for c in SCORING_CODE)
 
 
 def safe_relative(rel: str) -> bool:
@@ -456,32 +458,53 @@ class App:
     # --- yükleme ---
     def upload(self, name: str, length: int, stream) -> dict:
         name = Path(unquote(name)).name
+        # Reddederken de gövde okunur: tarayıcı gönderirken bağlantı kapanırsa yanıtı göremez, "bağlantı koptu" der.
         if not name.lower().endswith(DEMO_SUFFIXES):
+            read_body(stream, length)
             raise ApiError(HTTPStatus.BAD_REQUEST, "Yalnız .dem, .dem.zst, .dem.gz, .dem.bz2 yüklenebilir.")
         if not re.fullmatch(r'[^<>:"/\\|?*\x00-\x1f]+', name):  # ':' Windows'ta gizli veri akışına yazar
+            read_body(stream, length)
             raise ApiError(HTTPStatus.BAD_REQUEST, "Dosya adında izin verilmeyen karakter var.")
         UPLOADS.mkdir(exist_ok=True)
         dst = UPLOADS / name
         if dst.exists():
-            if dst.stat().st_size == length:  # aynı dosya yeniden bırakıldı
+            if read_body(stream, length, same_as=dst):  # aynı dosya yeniden bırakıldı (bayt bayt aynı)
                 return {"id": demo_id(dst), "zaten_var": True}
             raise ApiError(HTTPStatus.CONFLICT, f"{name} adında başka bir demo zaten var; dosyanın adını değiştirip yükleyin.")
         tmp = UPLOADS / f"{name}.{threading.get_ident()}.part"  # aynı anda iki yükleme aynı dosyaya yazmasın
         left = length
-        with open(tmp, "wb") as f:
-            while left > 0:
-                chunk = stream.read(min(CHUNK, left))
-                if not chunk:
-                    break
-                f.write(chunk)
-                left -= len(chunk)
-        if left:
+        try:
+            with open(tmp, "wb") as f:
+                while left > 0:
+                    chunk = stream.read(min(CHUNK, left))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    left -= len(chunk)
+            if left:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "Yükleme yarıda kesildi.")
+            tmp.replace(dst)
+        except BaseException:  # iptal (bağlantı koptu) dahil: yarım dosya kalmasın
             tmp.unlink(missing_ok=True)
-            raise ApiError(HTTPStatus.BAD_REQUEST, "Yükleme yarıda kesildi.")
-        tmp.replace(dst)
+            raise
         if UPLOADS not in self.folders:
             self.folders.append(UPLOADS)
         return {"id": demo_id(dst)}
+
+
+def read_body(stream, length: int, same_as: Path | None = None) -> bool:
+    """Gövdeyi okuyup atar. same_as verilirse gövde o dosyayla bayt bayt aynı mı döner (yoksa True)."""
+    left = length
+    with (open(same_as, "rb") if same_as else contextlib.nullcontext()) as f:
+        same = same_as is None or same_as.stat().st_size == length
+        while left > 0:
+            chunk = stream.read(min(CHUNK, left))
+            if not chunk:
+                return False
+            if same and f is not None and f.read(len(chunk)) != chunk:
+                same = False
+            left -= len(chunk)
+    return same
 
 
 class ApiError(Exception):
