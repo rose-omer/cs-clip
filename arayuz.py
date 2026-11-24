@@ -77,6 +77,9 @@ class App:
         self.locks: dict[str, threading.Lock] = {}
         self.lock = threading.Lock()
         self.job = {"durum": "bos", "mesaj": "", "satirlar": [], "demo": None}
+        self.proc: subprocess.Popen | None = None  # süren kaydın klip.py süreci (durdurmak için)
+        self.stop_requested = False
+        self._demo_cache: tuple[tuple, dict[str, Path]] | None = None
         self.montage_lock = threading.Lock()
         self.kilit = otomatik.KILIT  # otomatik kuyrukla paylaşılan kayıt kilidi
         self.oto_dosya = otomatik.DURUM_DOSYASI
@@ -128,7 +131,14 @@ class App:
 
     # --- demolar ---
     def demos(self) -> dict[str, Path]:
-        """id -> en iyi dosya (.dem varsa o, yoksa arşiv)."""
+        """id -> en iyi dosya (.dem varsa o, yoksa arşiv).
+
+        Klasörler yalnız içerikleri değişince yeniden taranır: dosya eklenince, silinince ya da adı değişince
+        klasörün değişme zamanı da değişir. Kayıt sürerken arayüz 2 sn'de bir sorar; İndirilenler kalabalık olabilir.
+        """
+        key = tuple((str(f), f.stat().st_mtime_ns if f.is_dir() else None) for f in self.folders)
+        if self._demo_cache is not None and self._demo_cache[0] == key:
+            return dict(self._demo_cache[1])
         found: dict[str, Path] = {}
         for folder in self.folders:
             if not folder.is_dir():
@@ -138,7 +148,8 @@ class App:
                     did = demo_id(p)
                     if did not in found or p.suffix.lower() == ".dem":
                         found[did] = p
-        return found
+        self._demo_cache = (key, found)
+        return dict(found)
 
     def demo_path(self, did: str) -> Path:
         p = self.demos().get(did)
@@ -151,13 +162,14 @@ class App:
             return self.locks.setdefault(did, threading.Lock())
 
     def cached_stats(self, path: Path) -> dict | None:
+        """Demonun istatistik önbelleği; yoksa, bozuksa ya da demodan eskiyse (aynı adla yeniden yüklendi) None."""
         f = path.with_name(demo_id(path) + ".stats.json")
-        if f.exists():
-            try:
-                return json.loads(f.read_text(encoding="utf-8"))
-            except ValueError:
+        try:
+            if f.stat().st_mtime < path.stat().st_mtime:
                 return None
-        return None
+            return json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
 
     def clip_files(self, did: str) -> list[Path]:
         if not self.out_dir.is_dir():
@@ -270,10 +282,13 @@ class App:
         with self.demo_lock(did):
             demo = open_demo(self.demo_path(did))
             others = [s for s in known if s != default["steamid"]]
+            # Ayarlardaki oyuncu bu demoda yoksa (arkadaşın demosu) herkes kendi dosyasında saklanır.
+            has_default = default["steamid"] is not None
             players = None
-            if known and default["steamid"] and fresh(highlights_path(demo), demo) \
+            if known and (not has_default or fresh(highlights_path(demo), demo)) \
                     and all(fresh(highlights_path(demo, s), demo) for s in others):
-                players = [{**default, "highlights": json.loads(highlights_path(demo).read_text(encoding="utf-8"))}]
+                players = [{**default, "highlights": json.loads(highlights_path(demo).read_text(encoding="utf-8"))}] \
+                    if has_default else []
                 for s in others:
                     data = read_player(highlights_path(demo, s)) or {}
                     players.append({"steamid": s, "ad": data.get("oyuncu") or s, "varsayilan": False,
@@ -318,7 +333,7 @@ class App:
                 raise ApiError(HTTPStatus.CONFLICT,
                                "Montaj için ffmpeg bulunamadı (winget install Gyan.FFmpeg ya da ayarlarda ffmpeg_yolu).")
             if share is not None:
-                return self._share_video(clips, ffmpeg, share)
+                return self._share_video(clips, ffmpeg, share, player)
             out = self.out_dir / eniyi.MONTAGE_NAME
             part = out.with_name(out.stem + ".part.mp4")  # oynatılan montaj yarım dosyayla bozulmasın
             try:
@@ -348,7 +363,7 @@ class App:
         finally:
             self.montage_lock.release()
 
-    def _share_video(self, clips: list[dict], ffmpeg: Path, opts: paylas.Options) -> dict:
+    def _share_video(self, clips: list[dict], ffmpeg: Path, opts: paylas.Options, player: str | None = None) -> dict:
         stats = {}
         for did, p in self.demos().items():
             if (s := paylas.read_json(p.parent / f"{did}.stats.json")) is not None:
@@ -362,11 +377,10 @@ class App:
             raise ApiError(HTTPStatus.CONFLICT, "Video dosyası kullanımda (oynatılıyor olabilir); kapatıp tekrar deneyin.")
         except subprocess.CalledProcessError as e:
             raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, f"ffmpeg videoyu üretemedi (çıkış kodu {e.returncode}).")
-        paylas.write_meta(out, clips, opts)
+        paylas.write_meta(out, clips, opts, player)
         info = next(i for i in paylas.share_info(self.out_dir) if i["dikey"] == opts.dikey)
-        return {"klip": info["klip"], "adet": len(clips), "boyut_mb": info["boyut_mb"], "tarih": info["tarih"],
-                "dikey": opts.dikey, "secenekler": info["secenekler"]}
-
+        return {"klip": info["klip"], "adet": len(clips), "oyuncu": player, "boyut_mb": info["boyut_mb"],
+                "tarih": info["tarih"], "dikey": opts.dikey, "secenekler": info["secenekler"]}
 
     # --- kariyer ---
     def career(self) -> dict:
@@ -376,19 +390,36 @@ class App:
     # --- kayıt ---
     def start_recording(self, did: str, best: int, player: str | None = None) -> dict:
         """player: ad ya da SteamID64 (klip.py --oyuncu); boşsa ayarlar.json'daki oyuncu."""
+        if self.job["durum"] == "calisiyor":
+            raise ApiError(HTTPStatus.CONFLICT, "Başka bir kayıt sürüyor.")
+        if otomatik.kilit_dolu(self.kilit):
+            raise ApiError(HTTPStatus.CONFLICT, "Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
+        path = self.demo_path(did)
+        # Ön kontrol kilit dışında: PostgreSQL'i başlatması saniyeler sürer, bu sırada öteki istekler beklemesin.
+        csgo = Path(self.cfg["csgo_klasoru"]) if self.cfg["csgo_klasoru"] else find_csgo_dir()
+        _, problems = preflight(self.cfg, csgo)
+        if problems:
+            raise ApiError(HTTPStatus.CONFLICT, "Kayıt başlayamaz: " + " ".join(problems))
         with self.lock:
             if self.job["durum"] == "calisiyor":
                 raise ApiError(HTTPStatus.CONFLICT, "Başka bir kayıt sürüyor.")
             if otomatik.kilit_dolu(self.kilit):
                 raise ApiError(HTTPStatus.CONFLICT, "Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
-            path = self.demo_path(did)
-            csgo = Path(self.cfg["csgo_klasoru"]) if self.cfg["csgo_klasoru"] else find_csgo_dir()
-            _, problems = preflight(self.cfg, csgo)
-            if problems:
-                raise ApiError(HTTPStatus.CONFLICT, "Kayıt başlayamaz: " + " ".join(problems))
+            self.stop_requested = False
             self.job = {"durum": "calisiyor", "mesaj": "Kayıt başladı", "satirlar": [], "demo": did, "oyuncu": player}
         threading.Thread(target=self._record, args=(path, best, player), daemon=True).start()
         return {"durum": "calisiyor", "oyuncu": player}
+
+    def stop_recording(self, did: str) -> dict:
+        """Süren kaydı durdurur: klip.py ve açtığı her şey (csdm, CS2) kapatılır. Biten klipler kalır."""
+        with self.lock:
+            if self.job["durum"] != "calisiyor" or self.job["demo"] != did:
+                raise ApiError(HTTPStatus.CONFLICT, "Bu demoda süren bir kayıt yok.")
+            self.stop_requested = True
+            proc = self.proc
+        if proc is not None:
+            render.kill_tree(proc.pid)
+        return {"durum": "durduruluyor"}
 
     def record_command(self, path: Path, best: int, player: str | None = None) -> list[str]:
         cmd = [sys.executable, str(ROOT / "klip.py"), str(path), "--en-iyi", str(best),
@@ -403,24 +434,39 @@ class App:
                     cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
                     text=True, encoding="utf-8", errors="replace",
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as p:
+                self.proc = p
+                if self.stop_requested:  # durdur, süreç açılmadan önce geldi
+                    render.kill_tree(p.pid)
                 for line in p.stdout:
                     if line.strip():
                         self.job["satirlar"] = (self.job["satirlar"] + [line.rstrip()])[-LOG_LINES:]
             ok = p.returncode == 0
-            self.job.update(durum="bitti" if ok else "hata",
-                            mesaj="Kayıt bitti" if ok else (self.job["satirlar"] or ["Kayıt başarısız"])[-1])
+            if self.stop_requested:
+                self.job.update(durum="hata", mesaj="Kayıt durduruldu. Bitmiş klipler korundu.")
+            else:
+                self.job.update(durum="bitti" if ok else "hata",
+                                mesaj="Kayıt bitti" if ok else (self.job["satirlar"] or ["Kayıt başarısız"])[-1])
         except otomatik.Mesgul:
             self.job.update(durum="hata", mesaj="Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
-        except OSError as e:
-            self.job.update(durum="hata", mesaj=str(e))
+        except Exception as e:  # noqa: BLE001 — ne olursa olsun iş "sürüyor"da kalmasın (sonraki kayıtlar 409 alır)
+            self.job.update(durum="hata", mesaj=f"Kayıt başlatılamadı: {e}")
+        finally:
+            self.proc = None
 
     # --- yükleme ---
     def upload(self, name: str, length: int, stream) -> dict:
         name = Path(unquote(name)).name
         if not name.lower().endswith(DEMO_SUFFIXES):
             raise ApiError(HTTPStatus.BAD_REQUEST, "Yalnız .dem, .dem.zst, .dem.gz, .dem.bz2 yüklenebilir.")
+        if not re.fullmatch(r'[^<>:"/\\|?*\x00-\x1f]+', name):  # ':' Windows'ta gizli veri akışına yazar
+            raise ApiError(HTTPStatus.BAD_REQUEST, "Dosya adında izin verilmeyen karakter var.")
         UPLOADS.mkdir(exist_ok=True)
-        dst, tmp = UPLOADS / name, UPLOADS / (name + ".part")
+        dst = UPLOADS / name
+        if dst.exists():
+            if dst.stat().st_size == length:  # aynı dosya yeniden bırakıldı
+                return {"id": demo_id(dst), "zaten_var": True}
+            raise ApiError(HTTPStatus.CONFLICT, f"{name} adında başka bir demo zaten var; dosyanın adını değiştirip yükleyin.")
+        tmp = UPLOADS / f"{name}.{threading.get_ident()}.part"  # aynı anda iki yükleme aynı dosyaya yazmasın
         left = length
         with open(tmp, "wb") as f:
             while left > 0:
@@ -514,8 +560,6 @@ def make_handler(app: App):
                 return self.handle_api(app.best)
             if path == "/api/otomatik":
                 return self.handle_api(lambda: otomatik.ozet(app.oto_dosya, app.kilit))
-
-
             if path == "/api/kariyer":
                 return self.handle_api(app.career)
             if m := re.fullmatch(r"/api/demo/([^/]+)/klipler", path):
@@ -540,7 +584,10 @@ def make_handler(app: App):
                 return self.refuse(HTTPStatus.BAD_REQUEST, "Content-Length geçersiz.")
             if path == "/api/yukle":
                 name = self.headers.get("X-Dosya-Adi", "")
+                self.close_connection = True  # reddedilen yüklemenin okunmamış gövdesi sonraki istek sanılmasın
                 return self.handle_api(lambda: app.upload(name, length, self.rfile))
+            if m := re.fullmatch(r"/api/demo/([^/]+)/durdur", path):
+                return self.handle_api(lambda: app.stop_recording(m.group(1)))
             # JSON zorunlu: tarayıcı başka siteden application/json POST'u ön denetimsiz gönderemez.
             ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
             if length and ctype != "application/json":
@@ -566,8 +613,6 @@ def make_handler(app: App):
                         raise ApiError(HTTPStatus.BAD_REQUEST, "Geçersiz JSON.")
                     return app.save_settings(data)
                 return self.handle_api(save)
-
-
             if m := re.fullmatch(r"/api/demo/([^/]+)/yeniden-hesapla", path):
                 return self.handle_api(lambda: app.stats(m.group(1), refresh=True))
             if path == "/api/en-iyi/montaj":

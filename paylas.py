@@ -443,9 +443,10 @@ def replace_retry(part: Path, out: Path, tries: int = 10, wait: float = 0.3) -> 
             time.sleep(wait)
 
 
-def write_meta(out: Path, rows: list[dict], opts: Options) -> None:
+def write_meta(out: Path, rows: list[dict], opts: Options, player: str | None = None) -> None:
+    """player: montajın oyuncu süzgeci (None = varsayılan oyuncu, eniyi.ALL_PLAYERS = herkes, yoksa etiket)."""
     out.with_suffix(".json").write_text(json.dumps(
-        {"adet": len(rows), "klipler": [r["ad"] for r in rows], "secenekler": asdict(opts)},
+        {"adet": len(rows), "oyuncu": player, "klipler": [r["ad"] for r in rows], "secenekler": asdict(opts)},
         ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -459,7 +460,8 @@ def share_info(out_dir: Path) -> list[dict]:
             continue
         meta = read_json(f.with_suffix(".json")) or {}
         st = f.stat()
-        rows.append({"klip": f"/klip/{SHARE_DIR}/{f.name}", "adet": meta.get("adet"), "dikey": vertical,
+        rows.append({"klip": f"/klip/{SHARE_DIR}/{f.name}", "adet": meta.get("adet"), "oyuncu": meta.get("oyuncu"),
+                     "dikey": vertical,
                      "secenekler": meta.get("secenekler"), "boyut_mb": round(st.st_size / 1024**2, 1),
                      "tarih": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")})
     return sorted(rows, key=lambda r: r["tarih"], reverse=True)

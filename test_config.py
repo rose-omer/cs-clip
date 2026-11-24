@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from config import DEFAULTS, load_config
+from config import DEFAULTS, load_config, validate
 
 
 def test_missing_file_gives_defaults(tmp_path):
@@ -77,3 +77,25 @@ def test_save_config_merges_and_drops_obsolete(tmp_path):
     assert data == {"oyuncu": "b", "once_sn": 5, "montaj": False}
     assert cfg["oyuncu"] == "b" and cfg["once_sn"] == 5 and cfg["min_skor"] == DEFAULTS["min_skor"]
     assert not (tmp_path / "ayarlar.json.tmp").exists()
+
+
+@pytest.mark.parametrize("veri,hatali", [
+    ({"kayit_cozunurluk": "1440p", "kayit_sistemi": "HLAE", "canli_kodlayici": "av1_nvenc"}, []),
+    ({"kayit_cozunurluk": "4k", "kayit_sistemi": "OBS", "canli_kodlayici": "libx264"},
+     ["kayit_cozunurluk", "kayit_sistemi", "canli_kodlayici"]),
+    ({"kayit_crf": 0}, []), ({"kayit_crf": 20}, []), ({"kayit_crf": 5}, ["kayit_crf"]), ({"kayit_crf": True}, ["kayit_crf"]),
+    ({"otomatik_bekle_sn": 60, "canli_port": 8770, "canli_fps": 60}, []),
+    ({"canli_port": 80, "canli_fps": 0}, ["canli_port", "canli_fps"]),
+    ({"faceit_api_anahtari": " abc ", "faceit_kullanici": "x", "canli_ses": ""}, []),
+    ({"faceit_kullanici": "x" * 65}, ["faceit_kullanici"]),
+    ({"canli_klasoru": ""}, ["canli_klasoru"]),
+])
+def test_validate_yeni_ayarlar(veri, hatali):
+    clean, errors = validate(veri, check_paths=False)
+    assert sorted(errors) == sorted(hatali)
+    assert set(clean) == set(veri) - set(hatali)
+
+
+def test_validate_her_varsayilan_ayari_kabul_eder():
+    clean, errors = validate(dict(DEFAULTS), check_paths=False)
+    assert errors == {} and set(clean) == set(DEFAULTS)  # hiçbir ayar sessizce atılmaz

@@ -156,22 +156,30 @@
 
   /* taraf çıkarımı: round bitiş nedeninden (ct_win, bomb_defused…) kazanan taraf belli olur */
   const kazananTaraf = (r) => (CT_NEDEN.has(r.neden) ? 'ct' : T_NEDEN.has(r.neden) ? 't' : null);
-  const yariNo = (no) => (no <= 12 ? 0 : no <= 24 ? 1 : 2 + Math.floor((no - 25) / 3));
+  // Yarı uzunluğu: rekabetçi MR12 (12 round), wingman MR8 (8 round). Takım başına oyuncu sayısından çıkarılır.
+  const yariUzunlugu = (s) => {
+    const n = {};
+    (s && s.oyuncular || []).forEach((o) => { n[o.takim] = (n[o.takim] || 0) + 1; });
+    const enCok = Math.max(0, ...Object.values(n));
+    return enCok && enCok <= 2 ? 8 : 12;
+  };
+  const yariNo = (no, y = 12) => (no <= y ? 0 : no <= 2 * y ? 1 : 2 + Math.floor((no - 2 * y - 1) / 3));
   const yariAd = (g) => (g === 0 ? '1. yarı' : g === 1 ? '2. yarı' : `Uzatma ${Math.floor((g - 2) / 2) + 1} · ${((g - 2) % 2) + 1}. yarı`);
   function taraflar(s) {
-    const m = {};
+    const y = yariUzunlugu(s);
+    const m = { y };  // y: yarı uzunluğu (takimTaraf kullanır)
     const R = s.roundlar || [];
     R.forEach((r) => {
-      const g = yariNo(r.no);
+      const g = yariNo(r.no, y);
       const w = kazananTaraf(r);
       if (m[g] || !w) return;
       m[g] = r.kazanan_takim === 0 ? w : karsi(w);
     });
-    const son = Math.max(0, ...R.map((r) => yariNo(r.no)));
+    const son = Math.max(0, ...R.map((r) => yariNo(r.no, y)));
     for (let g = 0; g <= son; g++) if (!m[g]) m[g] = g === 0 ? (m[1] ? karsi(m[1]) : 't') : karsi(m[g - 1]);
     return m;
   }
-  const takimTaraf = (m, takim, no) => { const x = m[yariNo(no)] || 't'; return takim === 0 ? x : karsi(x); };
+  const takimTaraf = (m, takim, no) => { const x = m[yariNo(no, m.y)] || 't'; return takim === 0 ? x : karsi(x); };
   const tarafRenk = (t) => (t === 'ct' ? 'var(--ct)' : 'var(--t)');
   const tarafAlfa = (t) => (t === 'ct' ? 'var(--ct-a)' : 'var(--t-a)');
 
@@ -189,17 +197,30 @@
   async function api(yol, secenek = {}) {
     if (ORNEK_MODU) return ornekApi(yol, secenek);
     let yanit;
+    // Zaman aşımı: ilk analiz ve montaj dakikalar sürebilir; sunucu takılırsa sayfa sonsuza dek beklemesin.
+    const iptal = new AbortController();
+    const sure = setTimeout(() => iptal.abort(), API_ZAMAN_ASIMI_MS);
     try {
       yanit = await fetch(yol, {
         method: secenek.method || 'GET',
         headers: secenek.body ? { 'Content-Type': 'application/json' } : undefined,
         body: secenek.body,
         cache: 'no-store',
+        signal: iptal.signal,
       });
     } catch {
+      clearTimeout(sure);
+      if (iptal.signal.aborted) throw new Error(`Sunucu ${API_ZAMAN_ASIMI_MS / 60000} dakikadır yanıt vermiyor; arayüz sunucusunu yeniden başlatmayı dene.`);
       throw new Error('Sunucuya ulaşılamadı. cs-klip sunucusu çalışıyor mu?');
     }
-    const metin = await yanit.text();
+    let metin;
+    try {
+      metin = await yanit.text();
+    } catch {
+      throw new Error('Sunucu yanıtı yarıda kesildi.');
+    } finally {
+      clearTimeout(sure);
+    }
     let veri = null;
     try { veri = metin ? JSON.parse(metin) : null; } catch { /* JSON değil */ }
     if (!yanit.ok) {
@@ -209,14 +230,27 @@
       throw h;
     }
     if (veri === null && metin) throw new Error('Sunucudan geçersiz yanıt geldi.');
-    return veri;
+    return zararsiz(veri);
   }
+  const API_ZAMAN_ASIMI_MS = 5 * 60 * 1000;
+  // 404: sunucu bu ucu tanımıyor (arayüz güncellendi, sunucu eski sürümle açık kaldı).
+  const SUNUCU_ESKI = 'Sunucu bu isteği tanımıyor (HTTP 404). Arayüz sunucusu bu özellikten önce başlatılmış olabilir: kapatıp arayuz.bat ile yeniden başlat.';
+  // Sunucu yanıtı diskteki .stats.json / .highlights.json'dan gelir; bu dosyaları başkası da koyabilir.
+  // Şablonlarda sayı diye basılan alanlara HTML sızmasın: metinlerde < > " zararsız benzerleriyle değişir.
+  const ZARARSIZ = { '<': '‹', '>': '›', '"': '″' };
+  const zararsiz = (v) => (typeof v === 'string' ? v.replace(/[<>"]/g, (c) => ZARARSIZ[c])
+    : Array.isArray(v) ? v.map(zararsiz)
+      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [zararsiz(k), zararsiz(x)]))
+        : v);
   const demoYol = (id, ek = '') => `/api/demo/${encodeURIComponent(id)}${ek}`;
 
+  let yuklemeXhr = null;
   function yukleXhr(dosya, ilerleme) {
     if (ORNEK_MODU) return ornekYukleme(dosya, ilerleme);
     return new Promise((coz, red) => {
       const xhr = new XMLHttpRequest();
+      yuklemeXhr = xhr; // "İptal" düğmesi için
+      xhr.onloadend = () => { if (yuklemeXhr === xhr) yuklemeXhr = null; };
       xhr.open('POST', '/api/yukle');
       xhr.setRequestHeader('X-Dosya-Adi', encodeURIComponent(dosya.name));
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
@@ -224,7 +258,7 @@
       xhr.onload = () => {
         let veri = null;
         try { veri = JSON.parse(xhr.responseText); } catch { /* boş */ }
-        if (xhr.status >= 200 && xhr.status < 300) coz(veri || {});
+        if (xhr.status >= 200 && xhr.status < 300) coz(zararsiz(veri || {}));
         else red(new Error((veri && veri.hata) || `Yükleme başarısız (HTTP ${xhr.status}).`));
       };
       xhr.onerror = () => red(new Error('Yükleme sırasında bağlantı koptu.'));
@@ -373,7 +407,7 @@
       };
       return kopya(v.en_iyi_montaj);
     }
-    const m = yol.match(/^\/api\/demo\/([^/]+)(\/klipler|\/kaydet|\/yeniden-hesapla|\/herkes)?$/);
+    const m = yol.match(/^\/api\/demo\/([^/]+)(\/klipler|\/kaydet|\/durdur|\/yeniden-hesapla|\/herkes)?$/);
     if (!m) throw hata(404, 'Bulunamadı.');
     const id = decodeURIComponent(m[1]);
     const demo = v.demolar.find((d) => d.id === id);
@@ -414,6 +448,12 @@
       return kopya({ oyuncular: satirlar });
     }
     if (method !== 'POST') throw hata(405, 'Geçersiz istek.');
+    if (m[2] === '/durdur') {
+      if (!v.isler[id] || k.kayit.durum !== 'calisiyor') throw hata(409, 'Bu demoda süren bir kayıt yok.');
+      delete v.isler[id];
+      k.kayit = { ...k.kayit, durum: 'hata', mesaj: 'Kayıt durduruldu. Bitmiş klipler korundu.' };
+      return { durum: 'durduruluyor' };
+    }
     if (Object.keys(v.isler).length) throw hata(409, 'Başka bir kayıt sürüyor.');
     const govde = JSON.parse(body || '{}');
     const enIyi = Number(govde.en_iyi) || 0;
@@ -594,8 +634,16 @@
       <p class="oto-not">${o.calisiyor ? esc(o.durum || '') : 'Yeni demoları kendiliğinden kaydetmek için <code>otomatik.bat</code> çalıştır.'}</p>
       ${liste ? `<ul>${liste}</ul>` : ''}`;
   }
-  async function otoYenile() {
-    try { otoCiz(await api('/api/otomatik')); } catch { otoCiz(null); }
+  // Otomatik kuyruk: işçi çalışıyorsa 5 sn'de bir, kapalıysa 30 sn'de bir sorulur (basla: 5 sn'lik saat).
+  let otoSonYoklama = 0, otoCalisiyor = true;
+  async function otoYenile(zorla = true) {
+    if (!zorla && !otoCalisiyor && Date.now() - otoSonYoklama < 30000) return;
+    otoSonYoklama = Date.now();
+    try {
+      const v = await api('/api/otomatik');
+      otoCalisiyor = !!(v && v.calisiyor);
+      otoCiz(v);
+    } catch { otoCiz(null); }
   }
 
   /* ======== kenar çubuğu ======== */
@@ -684,9 +732,12 @@
     if (!$('#modal').hidden) oynaticiKapat(); // oynatıcıdaki "Maça git" bağlantısı
     if (id === EN_IYI) enIyiAc();
     else if (id === AYARLAR) ayarlarAc();
-
     else if (id === KARIYER) kariyerAc();
     else if (id) demoAc(id);
+    else { // geri tuşuyla boş adrese dönüldü: son maçı (yoksa ilk analiz edilmiş maçı) aç
+      const son = S.sonDemo || (S.demolar.find((d) => d.analiz_edildi) || {}).id;
+      if (son) { history.replaceState(null, '', '#' + encodeURIComponent(son)); demoAc(son); } else bosCiz();
+    }
   }
 
   async function demoAc(id) {
@@ -844,7 +895,8 @@
     const bT = TK[biz], oT = TK[1 - biz];
     const sonuc = bT.skor > oT.skor ? ['galibiyet', 'Galibiyet'] : bT.skor < oT.skor ? ['maglubiyet', 'Mağlubiyet'] : ['berabere', 'Berabere'];
     const yarilar = {};
-    R.forEach((r) => { const g = yariNo(r.no); yarilar[g] = yarilar[g] || [0, 0]; yarilar[g][r.kazanan_takim === biz ? 0 : 1]++; });
+    const yu = yariUzunlugu(s);
+    R.forEach((r) => { const g = yariNo(r.no, yu); yarilar[g] = yarilar[g] || [0, 0]; yarilar[g][r.kazanan_takim === biz ? 0 : 1]++; });
     const yariHtml = Object.keys(yarilar).map(Number).sort((a, b) => a - b).map((g) =>
       `<span class="yari">${esc(yariAd(g))} <strong>${yarilar[g][0]}–${yarilar[g][1]}</strong></span>`).join('');
     const ad = haritaAd(s.harita) || 'Bilinmeyen';
@@ -978,7 +1030,8 @@
     const R = [...(s.roundlar || [])].sort((a, b) => a.no - b.no);
     if (!R.length) return '<p class="bos-not">Round bilgisi yok.</p>';
     const gruplar = {};
-    R.forEach((r) => { (gruplar[yariNo(r.no)] = gruplar[yariNo(r.no)] || []).push(r); });
+    const yu = yariUzunlugu(s);
+    R.forEach((r) => { (gruplar[yariNo(r.no, yu)] = gruplar[yariNo(r.no, yu)] || []).push(r); });
     const html = Object.keys(gruplar).map(Number).sort((a, b) => a - b).map((g) => {
       const rs = gruplar[g];
       const bizT = takimTaraf(T, biz, rs[0].no), onT = karsi(bizT);
@@ -1037,7 +1090,7 @@
     const enIyi = R.reduce((a, r) => (r.benim_kill > (a ? a.benim_kill : 0) ? r : a), null);
     let seri = 0, enUzun = 0;
     R.forEach((r) => { seri = r.kazanan_takim === biz ? seri + 1 : 0; enUzun = Math.max(enUzun, seri); });
-    const pistol = R.filter((r) => r.no === 1 || r.no === 13);
+    const pistol = R.filter((r) => r.no === 1 || r.no === yariUzunlugu(s) + 1);
     return `<div class="ri">
       <div class="ri-oge"><div class="ri-ad">Round başına ${EN('kill')}</div><div class="ri-deger">${sayi(ben ? ben.kill / n : 0, 2)}</div><div class="ri-alt">ölüm/round ${sayi(ben ? ben.death / n : 0, 2)}</div></div>
       <div class="ri-oge"><div class="ri-ad">Hayatta kaldın</div><div class="ri-deger">${yasadi}<small> / ${R.length}</small></div><div class="ri-alt">roundların %${sayi(yasadi / Math.max(R.length, 1) * 100)}'i</div></div>
@@ -1217,12 +1270,14 @@
     if (S.herkesYukleniyor === id) return;
     S.herkesYukleniyor = id;
     delete S.herkesHata[id];
+    const dur = sureSayaci('#herkesListe .yukleniyor-not',
+      (sn) => `Tüm oyuncuların ${EN('highlight')}'ları çıkarılıyor… ${sn} sn (ilk seferde birkaç saniye)`, true);
     try {
       S.herkes[id] = await api(demoYol(id, '/herkes'));
     } catch (e) {
-      S.herkesHata[id] = e.status === 404
-        ? 'Sunucu bu isteği tanımıyor (HTTP 404). Arayüz sunucusunu kapatıp arayuz.bat ile yeniden başlat.' : e.message;
+      S.herkesHata[id] = e.status === 404 ? SUNUCU_ESKI : e.message;
     } finally {
+      dur();
       if (S.herkesYukleniyor === id) S.herkesYukleniyor = null;
     }
     if (S.secili === id && S.gorunum === 'mac') herkesCiz();
@@ -1341,7 +1396,8 @@
     il.className = 'ilerleme ' + b.durum;
     const adimSinif = (i) => (b.durum === 'bitti' || i < b.adim ? 'tamam' : i === b.adim ? (b.durum === 'hata' ? 'hata' : 'simdi') : '');
     il.innerHTML = `<div class="il-ust"><span class="il-durum">${b.durum === 'bitti' ? 'Tamamlandı' : b.durum === 'hata' ? 'Hata' : 'Rec'}</span>
-        <span class="il-mesaj" title="${esc(b.mesaj)}">${esc(b.mesaj)}</span><span class="il-yuzde" title="Günlük satırlarından tahmini ilerleme">${b.durum === 'hata' ? '' : Math.round(b.yuzde) + '%'}</span></div>
+        <span class="il-mesaj" title="${esc(b.mesaj)}">${esc(b.mesaj)}</span><span class="il-yuzde" title="Günlük satırlarından tahmini ilerleme">${b.durum === 'hata' ? '' : Math.round(b.yuzde) + '%'}</span>
+        ${calisiyor ? `<button class="btn-ikincil il-durdur" type="button" id="kayitDurdur"${S.durduruluyor ? ' disabled' : ''}>${S.durduruluyor ? 'Durduruluyor…' : 'Durdur'}</button>` : ''}</div>
       <div class="il-bar"><i style="width:${b.durum === 'hata' ? 100 : b.yuzde}%"></i></div>
       <div class="adimlar">${ADIMLAR.map((a, i) => { const c = adimSinif(i); return `<div class="adim ${c}"><i>${c === 'tamam' ? '✓' : c === 'hata' ? '!' : i + 1}</i><span>${a}</span></div>`; }).join('')}</div>
       ${S.yoklamaHata && calisiyor ? `<div class="kayit-bilgi" style="color:var(--kotu);margin-top:10px">Kayıt durumu alınamadı: ${esc(S.yoklamaHata)} — yeniden deneniyor.</div>` : ''}
@@ -1349,6 +1405,23 @@
     const pre = $('#gunluk', il);
     if (pre && altta) pre.scrollTop = pre.scrollHeight;
     $('.gunluk', il).addEventListener('toggle', (e) => { S.gunlukAcik = e.target.open; });
+  }
+
+  // Takılan kaydı durdurur: sunucu klip.py'yi ve açtığı CS2'yi kapatır; bitmiş klipler kalır.
+  async function kaydiDurdur() {
+    const id = S.secili;
+    if (S.durduruluyor || !confirm('Kayıt durdurulsun mu? CS2 kapatılır; bitmiş klipler kalır.')) return;
+    S.durduruluyor = true;
+    kayitCiz();
+    try {
+      await api(demoYol(id, '/durdur'), { method: 'POST' });
+      bildir('Kayıt durduruluyor.');
+    } catch (e) {
+      bildir(e.message, 'hata');
+    } finally {
+      S.durduruluyor = false;
+      if (S.secili === id) kayitCiz();
+    }
   }
 
   async function kaydet() {
@@ -1466,12 +1539,13 @@
         <button class="ikon-dugme" type="button" data-kapat aria-label="Kapat">${ikon('i-x')}</button></div>
       <div class="oy-ekran">${ORNEK_MODU ? o.sahne : `<video id="oyVideo" src="${esc(src)}" preload="auto" playsinline></video>`}</div>
       <div class="oy-kontrol"><button class="ikon-dugme" type="button" id="oyDugme" aria-label="Oynat / duraklat">${ikon('i-pause')}</button>
-        <div class="oy-cubuk" id="oyCubuk" role="slider" aria-label="Klipte konum" tabindex="0"><i id="oyIlerle" style="width:0"></i></div><span class="oy-zaman" id="oyZaman">0:00 / ${sure(o.saniye || 0)}</span>
+        <div class="oy-cubuk" id="oyCubuk" role="slider" aria-label="Klipte konum" tabindex="0" aria-valuemin="0" aria-valuemax="${Math.round(o.saniye || 0)}" aria-valuenow="0" aria-valuetext="0:00"><i id="oyIlerle" style="width:0"></i></div><span class="oy-zaman" id="oyZaman">0:00 / ${sure(o.saniye || 0)}</span>
         ${ORNEK_MODU ? '' : `<button class="ikon-dugme ikincil" type="button" id="oyTam" aria-label="Tam ekran" title="Tam ekran">${ikon('i-full')}</button>`}</div>
       <div class="oy-not">${ORNEK_MODU ? `Örnek mod: ${esc(o.klip)} (dosya yok, oynatma taklit edilir)`
         : `<a href="${esc(src)}" target="_blank" rel="noopener">${esc(dosya)}</a> · Boşluk: oynat/duraklat · ←/→: 5 sn`}${o.ek || ''}</div></div>`;
     $('.kl-damga', m)?.remove();
     m.hidden = false;
+    arkaPlan(true);
     if (ORNEK_MODU) taklitOynat(o.saniye); else videoOynat();
     $('#oyDugme').focus();
   }
@@ -1482,6 +1556,7 @@
       const top = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
       $('#oyIlerle').style.width = (top ? v.currentTime / top * 100 : 0) + '%';
       $('#oyZaman').textContent = `${sure(v.currentTime)} / ${sure(top)}`;
+      cubukAria(v.currentTime, top);
     };
     const dugme = () => { $('#oyDugme').innerHTML = ikon(v.paused ? 'i-play' : 'i-pause'); };
     v.addEventListener('timeupdate', guncelle);
@@ -1499,6 +1574,34 @@
     const p = v.play();
     if (p && p.catch) p.catch(() => dugme());
   }
+  // Uzun işte geçen süreyi seçilen öğeye yazar; dönen fonksiyon sayacı durdurur. html: metin HTML içerir.
+  function sureSayaci(secici, metin, html = false) {
+    const bas = Date.now();
+    const t = setInterval(() => {
+      const el = $(secici);
+      if (!el) return;
+      const sn = Math.floor((Date.now() - bas) / 1000);
+      if (html) el.innerHTML = metin(sn); else el.textContent = metin(sn);
+    }, 1000);
+    return () => clearInterval(t);
+  }
+  // Ekran okuyucu için kaydırma çubuğunun değeri (role=slider); her karede değil, saniye değişince yazılır.
+  function cubukAria(t, top) {
+    const c = $('#oyCubuk');
+    if (!c) return;
+    const sn = Math.floor(t);
+    if (c.getAttribute('aria-valuenow') === String(sn) && c.getAttribute('aria-valuemax') === String(Math.round(top))) return;
+    c.setAttribute('aria-valuemax', String(Math.round(top)));
+    c.setAttribute('aria-valuenow', String(sn));
+    c.setAttribute('aria-valuetext', `${sure(t)} / ${sure(top)}`);
+  }
+  // Pencere açıkken arka plan odak ve ekran okuyucu dışında kalır (odak tuzağı).
+  function arkaPlan(kapali) {
+    [...document.body.children].forEach((el) => {
+      if (el.id === 'modal' || el.tagName === 'SCRIPT') return;
+      if (kapali) el.setAttribute('inert', ''); else el.removeAttribute('inert');
+    });
+  }
   function taklitOynat(saniye) {
     const top = Math.max(saniye || 1, 1);
     oynat = { t: 0, calis: true, son: performance.now(), top, raf: 0 };
@@ -1508,6 +1611,7 @@
       oynat.son = zaman;
       $('#oyIlerle').style.width = (oynat.t / oynat.top * 100) + '%';
       $('#oyZaman').textContent = `${sure(oynat.t)} / ${sure(oynat.top)}`;
+      cubukAria(oynat.t, oynat.top);
       if (oynat.t >= oynat.top && oynat.calis) { oynat.calis = false; $('#oyDugme').innerHTML = ikon('i-play'); }
       oynat.raf = requestAnimationFrame(kare);
     };
@@ -1547,6 +1651,7 @@
     oynat = null;
     $('#modal').hidden = true;
     $('#modal').innerHTML = '';
+    arkaPlan(false);
     if (acikti && oynatKaynak && document.contains(oynatKaynak)) oynatKaynak.focus();
     oynatKaynak = null;
   }
@@ -1574,13 +1679,12 @@
     return { klipler, montaj };
   }
   // 404: sunucu bu ucu tanımıyor (yeni özellikten önce başlatılmış).
-  const enIyiHataMetni = (e) => (e && e.status === 404
-    ? 'Sunucu bu isteği tanımıyor (HTTP 404). Arayüz sunucusu bu özellikten önce başlatılmış olabilir: kapatıp arayuz.bat ile yeniden başlat.'
-    : (e && e.message) || 'Bilinmeyen hata.');
+  const enIyiHataMetni = (e) => (e && e.status === 404 ? SUNUCU_ESKI : (e && e.message) || 'Bilinmeyen hata.');
 
-  function enIyiAc() {
+  // Maç dışı görünümler (en iyi anlar, ayarlar, kariyer) için ortak açılış.
+  function gorunumAc(ad) {
     S.istekNo++; // süren demo yüklemeleri #ana'yı artık çizmesin
-    S.gorunum = 'en-iyi';
+    S.gorunum = ad;
     S.secili = null;
     menuAc(false);
     ipucuGizle();
@@ -1588,6 +1692,9 @@
     scrollTo({ top: 0, behavior: kaydir() });
     listeCiz();
     gezinCiz();
+  }
+  function enIyiAc() {
+    gorunumAc(EN_IYI);
     enIyiCiz();
     enIyiYukle();
   }
@@ -1917,6 +2024,7 @@
   async function kuyruguIsle() {
     if (S.yukleniyor) return;
     S.yukleniyor = true;
+    $('#yuklemeIptal').hidden = ORNEK_MODU; // örnek modda yükleme taklit edilir, iptal yok
     let sonId = null, hataVar = false;
     while (S.kuyruk.length) {
       const f = S.kuyruk.shift();
@@ -1940,6 +2048,7 @@
       }
     }
     S.yukleniyor = false;
+    $('#yuklemeIptal').hidden = true;
     await demolariYenile();
     if (!hataVar) setTimeout(() => { if (!S.yukleniyor) $('#yukleme').hidden = true; }, 1500);
     if (sonId) demoSec(sonId); // yeni demo açılır; analiz edilmemişse sunucu analiz eder
@@ -1947,23 +2056,17 @@
 
   /* ======== Ayarlar (#ayarlar): sayfayı arayuz/ayarlar.js çizer ======== */
   function ayarlarAc() {
-    S.istekNo++; // süren demo yüklemeleri #ana'yı artık çizmesin
-    S.gorunum = AYARLAR;
-    S.secili = null;
-    menuAc(false);
-    ipucuGizle();
-    if (gozlem) { gozlem.disconnect(); gozlem = null; }
-    scrollTo({ top: 0, behavior: kaydir() });
-    listeCiz();
-    gezinCiz();
+    gorunumAc(AYARLAR);
     if (window.csklipAyarlar) window.csklipAyarlar.ac($('#ana'));
     else hataCiz('Ayarlar açılamadı', 'ayarlar.js yüklenemedi; sayfayı yenile.', null);
   }
   // ayarlar.js'in kullandığı yardımcılar; kayıttan sonra demo listesi ve kontrol yenilenir.
   window.csklip = {
-    api, bildir, esc, ikon, ornek: ORNEK_MODU,
+    api, bildir, esc, ikon, ornek: ORNEK_MODU, SUNUCU_ESKI,
     ayarlarKaydedildi(sonuc) {
       if (sonuc && sonuc.yeniden_analiz) { S.demo = {}; S.klipler = {}; S.ei = null; }
+      // Oyuncu ya da süreler değiştiyse "Herkes", seçili oyuncu ve kariyer eski kişiyi gösterir; ucuz, hep temizle.
+      S.herkes = {}; S.herkesHata = {}; S.oyuncu = {}; S.kr = null; S.krHata = null;
       demolariYenile();
       kontrolYenile();
     },
@@ -2044,15 +2147,7 @@
   }
 
   function kariyerAc() {
-    S.istekNo++; // süren demo yüklemeleri #ana'yı artık çizmesin
-    S.gorunum = KARIYER;
-    S.secili = null;
-    menuAc(false);
-    ipucuGizle();
-    if (gozlem) { gozlem.disconnect(); gozlem = null; }
-    scrollTo({ top: 0, behavior: kaydir() });
-    listeCiz();
-    gezinCiz();
+    gorunumAc(KARIYER);
     kariyerCiz();
     kariyerYukle();
   }
@@ -2227,7 +2322,7 @@
       const tip = `${kisaTarih(x.tarih)} · ${haritaAd(x.harita) || '?'} ${x.skor[0]}–${x.skor[1]} (${SONUC_AD[x.sonuc]})\n${m.duz} ${sayi(deg[i], m.o)}${m.birim || ''} · son 10 ort. ${sayi(kayan[i], m.o)}${m.birim || ''}${x.demo_var ? '\nTıkla: maçı aç' : ''}`;
       s += `<rect class="kr-isabet" x="${X(i) - genis / 2}" y="${P.t}" width="${genis}" height="${ih}" data-tip="${esc(tip)}"${x.demo_var ? ` data-demo="${esc(x.id)}"` : ''}/>`;
     });
-    kutu.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(m.duz)}: ${l.length} maç, son 10 ortalaması ${esc(sayi(kayan[kayan.length - 1], m.o))}">${s}</svg>`;
+    kutu.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(m.duz)}: ${l.length} maç, son 10 ortalaması ${esc(sayi(kayan[kayan.length - 1], m.o))}. Maç maç değerler aşağıdaki tabloda.">${s}</svg>`;
   }
   let grafikZaman = 0;
   addEventListener('resize', () => {
@@ -2589,6 +2684,7 @@
           <p>${neden} Isı haritası, utility ve nişan metrikleri için demo yeniden hesaplanmalı; skor tablosu ve klipler değişmez.</p>
           ${DR.hata[id] ? `<p class="renk-kotu">${esc(DR.hata[id])}</p>` : ''}
           <button class="btn-ikincil" type="button" data-dr-yenile ${sur ? 'disabled' : ''}>${ikon('i-refresh')}${sur ? 'Hesaplanıyor…' : 'Yeniden hesapla'}</button>
+          ${sur ? '<p class="soluk" id="drSure" aria-live="off">10–40 saniye sürebilir.</p>' : ''}
           ${sur ? '<small>Demo yeniden okunuyor; büyük demolarda 10–40 saniye sürebilir.</small>' : ''}
         </div></section></div>`;
     }
@@ -2773,6 +2869,7 @@
     DR.hesaplaniyor.add(id);
     delete DR.hata[id];
     derinYerine(id);
+    const dur = sureSayaci('#drSure', (sn) => `${sn} sn · 10–40 saniye sürebilir.`);
     try {
       const s = await api(demoYol(id, '/yeniden-hesapla'), { method: 'POST', body: '{}' });
       S.demo[id] = s;
@@ -2782,6 +2879,7 @@
       DR.hata[id] = e.message;
       bildir(e.message, 'hata');
     } finally {
+      dur();
       DR.hesaplaniyor.delete(id);
       derinYerine(id);
     }
@@ -2870,6 +2968,8 @@
     const n = t.closest('#kayitSecim button[data-n]');
     if (n && !n.disabled) { S.enIyi = +n.dataset.n; $$('#kayitSecim button').forEach((b) => { b.classList.toggle('aktif', b === n); b.setAttribute('aria-checked', String(b === n)); }); kayitCiz(); return; }
     if (t.closest('#kaydet')) { kaydet(); return; }
+    if (t.closest('#kayitDurdur')) { kaydiDurdur(); return; }
+    if (t.closest('#yuklemeIptal')) { S.kuyruk = []; if (yuklemeXhr) yuklemeXhr.abort(); return; }
     if (t.closest('#kontrolYenile')) { kontrolYenile(true); return; }
     if (t.closest('#durumHap')) {
       const kk = $('#klipler');
@@ -2912,6 +3012,24 @@
       if (e.key === ' ' && !dugmede) { e.preventDefault(); oynatDegistir(); return; }
       if (e.key === 'ArrowLeft') { e.preventDefault(); oynatAtla(null, -5); return; }
       if (e.key === 'ArrowRight') { e.preventDefault(); oynatAtla(null, 5); return; }
+      if (e.key === 'Home' && e.target.id === 'oyCubuk') { e.preventDefault(); oynatAtla(0); return; }
+      if (e.key === 'End' && e.target.id === 'oyCubuk') { e.preventDefault(); oynatAtla(1); return; }
+    }
+    // role=radio grupları: ok tuşlarıyla seçenekler arasında gezin (WAI-ARIA radiogroup)
+    const radyo = e.target.closest && e.target.closest('[role=radiogroup] [role=radio]');
+    if (radyo && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      const l = [...radyo.closest('[role=radiogroup]').querySelectorAll('[role=radio]:not([disabled])')];
+      const i = l.indexOf(radyo);
+      if (i < 0 || !l.length) return;
+      const yeni = l[(i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1) + l.length) % l.length];
+      e.preventDefault();
+      const grup = yeni.closest('[role=radiogroup]').getAttribute('aria-label'), metin = yeni.textContent;
+      yeni.click();
+      // tıklama grubu yeniden çizmiş olabilir: aynı gruptaki aynı yazılı düğmeye odaklan
+      const hedef = yeni.isConnected ? yeni : [...document.querySelectorAll('[role=radiogroup] [role=radio]')]
+        .find((b) => b.closest('[role=radiogroup]').getAttribute('aria-label') === grup && b.textContent === metin);
+      if (hedef) hedef.focus();
+      return;
     }
     if ((e.key === 'Enter' || e.key === ' ') && e.target === $('#birak')) { e.preventDefault(); $('#dosyaSec').click(); return; }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('th[data-sira]')) { e.preventDefault(); siralaDegis(e.target); }
@@ -2953,7 +3071,7 @@
     kontrolYenile();
     setInterval(() => { if (document.visibilityState === 'visible') kontrolYenile(); }, KONTROL_MS);
     otoYenile();
-    setInterval(() => { if (document.visibilityState === 'visible') otoYenile(); }, 5000);
+    setInterval(() => { if (document.visibilityState === 'visible') otoYenile(false); }, 5000);
     const ok = await demolariYenile();
     if (location.hash.length > 1) { hashtenAc(); return; }
     const ilk = S.demolar.find((d) => d.analiz_edildi);

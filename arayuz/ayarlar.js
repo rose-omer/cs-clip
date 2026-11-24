@@ -21,18 +21,38 @@
       { k: 'demo_klasorleri', etiket: 'Demo klasörleri', tur: 'liste', ipucu: 'Her satıra bir klasör. Boşsa İndirilenler ve demos/ taranır.' },
       { k: 'csgo_klasoru', etiket: 'CS2 klasörü', tur: 'yol', yerTutucu: 'Boş: Steam\'den bulunur', ipucu: '…\\Counter-Strike Global Offensive\\game\\csgo' },
     ] },
-    { no: '04', baslik: 'Araç yolları', ek: 'Boş bırakılırsa kendiliğinden bulunur', gelismis: true, alanlar: [
+    { no: '04', baslik: 'CS2 ile kayıt', ek: 'CS Demo Manager kaydının kalitesi', alanlar: [
+      { k: 'kayit_cozunurluk', etiket: 'Çözünürlük', tur: 'secim', secenekler: [['', 'CSDM\'in ayarı'], ['1080p', '1080p'], ['1440p', '1440p']] },
+      { k: 'kayit_crf', etiket: 'Kalite (CRF)', tur: 'sayi', min: 0, max: 35, adim: 1, ipucu: '0 = CSDM\'in ayarı; yoksa 14–35 (düşük = daha iyi, daha büyük dosya).' },
+      { k: 'kayit_sistemi', etiket: 'Kayıt sistemi', tur: 'secim', secenekler: [['CS', 'CS (varsayılan)'], ['HLAE', 'HLAE']], ipucu: 'HLAE kuruluysa CS takılınca son çare olarak da denenir.' },
+    ] },
+    { no: '05', baslik: 'Otomatik kayıt ve FACEIT', ek: 'otomatik.bat ve FACEIT\'ten demo indirme', alanlar: [
+      { k: 'otomatik_bekle_sn', etiket: 'CS2 kapandıktan sonra bekle (sn)', tur: 'sayi', min: 0, max: 3600, adim: 1 },
+      { k: 'faceit_kullanici', etiket: 'FACEIT kullanıcı adı', tur: 'metin', yerTutucu: 'Boş: oyuncu adı' },
+      { k: 'faceit_api_anahtari', etiket: 'FACEIT API anahtarı', tur: 'gizli', ipucu: 'developers.faceit.com → App Studio → API Keys → Server side. Yalnız bu bilgisayarda, ayarlar.json\'da durur.' },
+    ] },
+    { no: '06', baslik: 'Canlı kayıt', ek: 'canli.bat: oynarken ekranı kaydeder (deneme)', alanlar: [
+      { k: 'canli_klasoru', etiket: 'Ham kayıt klasörü', tur: 'yol', ipucu: 'Maç başına birkaç GB; klipler kesildikten sonra silinebilir.' },
+      { k: 'canli_kodlayici', etiket: 'Kodlayıcı', tur: 'secim', secenekler: [['h264_nvenc', 'H.264 (NVENC)'], ['hevc_nvenc', 'HEVC (NVENC)'], ['av1_nvenc', 'AV1 (NVENC, RTX 40 ve sonrası)']] },
+      { k: 'canli_fps', etiket: 'Kare hızı', tur: 'sayi', min: 10, max: 240, adim: 1, ipucu: 'Oyunun FPS\'inden bağımsız; 60 yeterli.' },
+      { k: 'canli_port', etiket: 'GSI portu', tur: 'sayi', min: 1024, max: 65535, adim: 1, ipucu: 'Değişirse "canli.bat kur" yeniden çalıştırılmalı.' },
+      { k: 'canli_ses', etiket: 'Ses cihazı', tur: 'metin', yerTutucu: 'Boş: sessiz', ipucu: 'DirectShow cihaz adı, ör. "Stereo Mix (Realtek(R) Audio)".' },
+    ] },
+    { no: '07', baslik: 'Araç yolları', ek: 'Boş bırakılırsa kendiliğinden bulunur', gelismis: true, alanlar: [
       { k: 'csdm_yolu', etiket: 'CS Demo Manager (csdm.cmd)', tur: 'yol', yerTutucu: 'Boş: %LOCALAPPDATA%\\Programs\\cs-demo-manager\\csdm.cmd' },
       { k: 'ffmpeg_yolu', etiket: 'ffmpeg.exe', tur: 'yol', yerTutucu: 'Boş: PATH ve winget klasörü' },
       { k: 'pg_veri_klasoru', etiket: 'PostgreSQL veri klasörü', tur: 'yol', yerTutucu: 'Boş: %LOCALAPPDATA%\\csdm-pg\\data' },
     ] },
   ];
   const ALANLAR = BOLUMLER.flatMap((b) => b.alanlar);
+  const ZORUNLU = ['oyuncu', 'cikti_klasoru', 'canli_klasoru'];
 
   // Örnek modu (?ornek=1): sunucu yok, ayarlar sayfada tutulur.
   const ORNEK = {
     ayarlar: { oyuncu: 'DuranEnnmi', min_skor: 3, mac_basi_en_fazla: 0, once_sn: 3, sonra_sn: 2, temiz_hud: true, montaj: true,
-      cikti_klasoru: 'klipler', csgo_klasoru: '', csdm_yolu: '', ffmpeg_yolu: '', pg_veri_klasoru: '', demo_klasorleri: [] },
+      cikti_klasoru: 'klipler', csgo_klasoru: '', csdm_yolu: '', ffmpeg_yolu: '', pg_veri_klasoru: '', demo_klasorleri: [],
+      kayit_cozunurluk: '', kayit_crf: 0, kayit_sistemi: 'CS', otomatik_bekle_sn: 120, faceit_api_anahtari: '', faceit_kullanici: '',
+      canli_klasoru: 'kayitlar', canli_port: 8770, canli_fps: 60, canli_kodlayici: 'h264_nvenc', canli_ses: '' },
     dosya: 'ayarlar.json (örnek)',
   };
   ORNEK.varsayilan = { ...ORNEK.ayarlar };
@@ -67,10 +87,15 @@
       giris = `<label class="ay-anahtar"><input type="checkbox" id="${id}" name="${f.k}" ${v ? 'checked' : ''} ${tanim}><span class="ay-anahtar-yol"></span><span class="ay-anahtar-yazi">${v ? 'Açık' : 'Kapalı'}</span></label>`;
     } else if (f.tur === 'liste') {
       giris = `<textarea id="${id}" name="${f.k}" rows="3" spellcheck="false" placeholder="C:\\Users\\…\\Downloads" ${tanim}>${esc(v)}</textarea>`;
+    } else if (f.tur === 'secim') {
+      giris = `<select id="${id}" name="${f.k}" ${tanim}>${f.secenekler.map(([d, ad]) =>
+        `<option value="${esc(d)}"${String(v) === d ? ' selected' : ''}>${esc(ad)}</option>`).join('')}</select>`;
+    } else if (f.tur === 'gizli') {
+      giris = `<input type="password" id="${id}" name="${f.k}" value="${esc(v)}" spellcheck="false" autocomplete="off" ${tanim}>`;
     } else if (f.tur === 'sayi') {
       giris = `<input type="number" id="${id}" name="${f.k}" value="${esc(v)}" min="${f.min}" max="${f.max}" step="${f.adim}" inputmode="decimal" required ${tanim}>`;
     } else {
-      giris = `<input type="text" id="${id}" name="${f.k}" value="${esc(v)}" spellcheck="false" autocomplete="off"${f.yerTutucu ? ` placeholder="${esc(f.yerTutucu)}"` : ''}${f.k === 'oyuncu' || f.k === 'cikti_klasoru' ? ' required' : ''} ${tanim}>`;
+      giris = `<input type="text" id="${id}" name="${f.k}" value="${esc(v)}" spellcheck="false" autocomplete="off"${f.yerTutucu ? ` placeholder="${esc(f.yerTutucu)}"` : ''}${ZORUNLU.includes(f.k) ? ' required' : ''} ${tanim}>`;
     }
     return `<div class="ay-alan${hata ? ' hatali' : ''}${f.tur === 'liste' ? ' genis' : ''}" data-alan="${f.k}">
       <label class="ay-etiket" for="${id}">${esc(f.etiket)}${farkli ? '<em title="Varsayılandan farklı">değişti</em>' : ''}</label>
@@ -146,12 +171,14 @@
     const h = {};
     if (!String(v.oyuncu || '').trim()) h.oyuncu = 'Oyuncu adı boş olamaz.';
     if (!String(v.cikti_klasoru || '').trim()) h.cikti_klasoru = 'Klip klasörü boş olamaz.';
+    if (!String(v.canli_klasoru || '').trim()) h.canli_klasoru = 'Ham kayıt klasörü boş olamaz.';
     for (const f of ALANLAR.filter((x) => x.tur === 'sayi')) {
       const n = v[f.k];
       if (n === '' || !Number.isFinite(n)) h[f.k] = 'Sayı olmalı.';
       else if (n < f.min || n > f.max) h[f.k] = `${f.min} ile ${f.max} arasında olmalı.`;
       else if (f.adim === 1 && !Number.isInteger(n)) h[f.k] = 'Tam sayı olmalı.';
     }
+    if (!h.kayit_crf && v.kayit_crf > 0 && v.kayit_crf < 14) h.kayit_crf = '0 ya da 14–35 olmalı.';
     return h;
   }
 
@@ -161,7 +188,7 @@
       if (!kutu) continue;
       const m = A.alanHata[f.k];
       kutu.classList.toggle('hatali', !!m);
-      const el = kutu.querySelector('input, textarea');
+      const el = kutu.querySelector('input, textarea, select');
       if (m) el.setAttribute('aria-invalid', 'true'); else el.removeAttribute('aria-invalid');
       const s = kutu.querySelector('.ay-hata');
       s.hidden = !m;
@@ -210,7 +237,7 @@
       A.veri = await istek('GET');
     } catch (e) {
       A.hata = e && e.status === 404
-        ? 'Sunucu bu isteği tanımıyor (HTTP 404). Arayüz sunucusu bu özellikten önce başlatılmış olabilir: kapatıp arayuz.bat ile yeniden başlat.'
+        ? C().SUNUCU_ESKI
         : (e && e.message) || 'Bilinmeyen hata.';
     }
     if (location.hash === '#ayarlar') ciz();

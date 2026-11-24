@@ -28,14 +28,14 @@ from pathlib import Path
 
 import gsi
 from analyze import analyze_player, player_tag
-from config import load_config
+from config import CANLI_KODLAYICILAR, load_config
 from demofile import find_csgo_dir, open_demo
 from highlights import TICKRATE
 from klip import clip_prefix
 from kontrol import find_ffmpeg
 from render import clip_filename, join_parts, segments, select_clips
 
-KODLAYICILAR = ("h264_nvenc", "hevc_nvenc", "av1_nvenc")
+KODLAYICILAR = CANLI_KODLAYICILAR
 # Sabit kalite (VBR + CQ 23); 1080p60 oyun görüntüsünde ~10-25 Mbps. Anahtar kare saniyede bir:
 # yeniden kodlamadan kesim en fazla 1 sn erken başlar.
 KALITE = ["-preset", "p4", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-maxrate", "40M", "-bufsize", "80M"]
