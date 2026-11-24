@@ -87,7 +87,9 @@ def _context(group: pd.DataFrame, round_kills: pd.DataFrame, steamid: str, round
              won: bool, last_round: bool, team_size: int = TEAM_SIZE) -> list[tuple[str, float]]:
     """Bağlam ölçütleri: [(özellik etiketi, puan)]. group: oyuncunun bu round'daki geçerli kill'leri."""
     out: list[tuple[str, float]] = []
-    enemy_kills = round_kills[round_kills["attacker_team_num"] != round_kills["user_team_num"]]
+    # Dünya ölümleri (düşme, bomba) saldırgansızdır: NaN takım "rakip" sayılıp açılışı gölgelemesin.
+    enemy_kills = round_kills[round_kills["attacker_team_num"].notna()
+                              & (round_kills["attacker_team_num"] != round_kills["user_team_num"])]
     if not enemy_kills.empty and str(enemy_kills["attacker_steamid"].iloc[0]) == steamid:
         out.append(("açılış", OPENING_POINTS))
     if _has(group, "attacker_round_start_equip_value", "user_round_start_equip_value"):

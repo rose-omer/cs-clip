@@ -1,4 +1,5 @@
 import io
+import time
 from pathlib import Path
 
 import pytest
@@ -247,3 +248,40 @@ def test_oturum_bul_en_cok_roundu_kapsayani_secer(tmp_path):
     canli.oturum_yaz(tmp_path / "uzun.json", oturum(video="uzun.mkv", roundlar=uzun))
     f, _ = canli.oturum_bul(tmp_path, "de_dust2", DEMO)
     assert f.name == "uzun.json"
+
+
+def test_mac_bitince_ayni_haritaya_donus_kaydi_surdurur(tmp_path):
+    """Yeniden bağlanma: maç bitti olayından sonra gecikmeli kapanma beklenirken aynı harita yeniden başlar."""
+    s = SahteSurec()
+    k = kaydedici(tmp_path, [s])
+    f = k.baslat("de_dust2", "765")
+    canli.olay_isle(canli.gsi.Olay("mac_bitti", 1.0, "de_dust2"), k, kayit_suruyor=lambda: False)
+    assert k.bitiyor
+    canli.olay_isle(canli.gsi.Olay("mac_basladi", 2.0, "de_dust2", steamid="765"), k, kayit_suruyor=lambda: False)
+    assert not k.bitiyor and k.aktif and k.dosya == f and s.stdin.getvalue() == ""  # kapanmadı, aynı kayıt
+
+
+def test_mac_bitince_yeni_harita_ayri_kayit_acar(tmp_path):
+    eski_surec, yeni_surec = SahteSurec(), SahteSurec()
+    k = kaydedici(tmp_path, [eski_surec, yeni_surec])
+    eski = k.baslat("de_dust2", "765")
+    canli.olay_isle(canli.gsi.Olay("mac_bitti", 1.0, "de_dust2"), k, kayit_suruyor=lambda: False)
+    canli.olay_isle(canli.gsi.Olay("mac_basladi", 2.0, "de_mirage", steamid="765"), k, kayit_suruyor=lambda: False)
+    assert k.aktif and not k.bitiyor and k.surec is yeni_surec and k.dosya != eski
+    for _ in range(100):  # eski kayıt arka planda kapanır
+        if canli.oturum_oku(eski)["video_baslangic"] is not None:
+            break
+        time.sleep(0.02)
+    assert eski_surec.stdin.getvalue() == "q" and canli.oturum_oku(eski)["video_baslangic"] == 99.0
+
+
+def test_gecikmeli_durdurma_kaydi_kapatir(tmp_path):
+    s = SahteSurec()
+    k = kaydedici(tmp_path, [s])
+    k.baslat("de_dust2", "765")
+    k.gecikmeli_durdur(0.01)
+    for _ in range(100):
+        if not k.aktif:
+            break
+        time.sleep(0.02)
+    assert not k.aktif and not k.bitiyor and s.stdin.getvalue() == "q"

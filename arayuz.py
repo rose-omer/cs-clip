@@ -429,7 +429,7 @@ class App:
         return cmd + [f"--oyuncu={player}"] if player else cmd  # '=' ile: '-' ile başlayan ad bayrak sanılmasın
 
     def _record(self, path: Path, best: int, player: str | None = None) -> None:
-        env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+        env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", **{otomatik.KILIT_TUTULUYOR: "1"})
         cmd = self.record_command(path, best, player)
         try:
             with otomatik.kayit_kilidi(self.kilit), subprocess.Popen(

@@ -189,3 +189,10 @@ def test_wingman_clutch_takim_boyuna_gore():
 def test_wingman_uzatmasi_17_round():
     assert "uzatma" in one([kill(16, 2000)], team_size=2)["ozellikler"]  # round 17
     assert "uzatma" not in one([kill(16, 2000)])["ozellikler"]  # 5v5'te round 17 normal süre
+
+
+def test_acilis_dunya_olumunden_etkilenmez():
+    """Round'un ilk ölümü düşme/bomba (saldırgansız) olsa da ilk gerçek kill açılış sayılır."""
+    dunya = {**kill(1, 900, victim="m1"), "attacker_steamid": None, "attacker_team_num": float("nan"),
+             "user_team_num": MY_TEAM, "weapon": "world"}
+    assert "açılış" in one([dunya, kill(1, 1000)])["ozellikler"]

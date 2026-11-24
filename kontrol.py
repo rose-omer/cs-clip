@@ -13,11 +13,13 @@ from pathlib import Path
 
 MIN_FREE_GB = 10  # CS2 kareleri kayıt sırasında TGA olarak diske yazılır
 BLOCKERS = {
+    "faceit.exe": "FACEIT açık",  # yeni istemci (2026 sonu) bu adla çalışıyor
     "faceitclient.exe": "FACEIT açık",
     "faceitservice.exe": "FACEIT Anti-Cheat hizmeti çalışıyor",
     "cs2.exe": "CS2 açık",
 }
 BLOCKER_HINT = {
+    "faceit.exe": "FACEIT açıkken CS2 demo kaydı için başlatılamaz. FACEIT'ten çık (sistem tepsisi → Quit).",
     "faceitclient.exe": "FACEIT açıkken CS2 demo kaydı için başlatılamaz. FACEIT'ten çık (sistem tepsisi → Quit).",
     "faceitservice.exe": "FACEIT'ten tamamen çıkınca hizmet de durur.",
     "cs2.exe": "Kayıt CS2'yi kendisi açıp kapatır. Oyunu kapatıp tekrar dene.",

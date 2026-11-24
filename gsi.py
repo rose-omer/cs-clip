@@ -82,6 +82,11 @@ def cfg_yaz(csgo_dir: Path, port: int) -> Path:
     return f
 
 
+def _sozluk(deger) -> dict:
+    """GSI alanı nesne değilse (null, metin) boş sözlük: bozuk durum sunucuyu düşürmesin."""
+    return deger if isinstance(deger, dict) else {}
+
+
 @dataclass
 class Olay:
     tur: str  # "mac_basladi" | "round_basladi" | "mac_bitti"
@@ -104,8 +109,8 @@ class Izleyici:
     def besle(self, durum: dict, simdi: float | None = None) -> list[Olay]:
         simdi = time.time() if simdi is None else simdi
         self.son_durum = simdi
-        steamid = str(durum.get("provider", {}).get("steamid", ""))
-        harita_bilgisi = durum.get("map")
+        steamid = str(_sozluk(durum.get("provider")).get("steamid", ""))
+        harita_bilgisi = _sozluk(durum.get("map"))
         olaylar: list[Olay] = []
 
         def bitir(harita: str) -> None:
@@ -121,7 +126,7 @@ class Izleyici:
 
         harita = str(harita_bilgisi.get("name", ""))
         mac = str(harita_bilgisi.get("phase", ""))
-        rnd = str(durum.get("round", {}).get("phase", ""))
+        rnd = str(_sozluk(durum.get("round")).get("phase", ""))
 
         if harita != self.harita:
             bitir(self.harita)
@@ -133,7 +138,13 @@ class Izleyici:
         # bağlanma) round'un başı değildir, o round için çapa yazılmaz.
         if mac == "live" and rnd == "live" and self.round_evresi == "freezetime":
             # map.round biten round sayısıdır: oynanan round'un numarası bir fazlası.
-            no = int(harita_bilgisi.get("round", 0)) + 1
+            try:
+                no = int(harita_bilgisi.get("round", 0)) + 1
+            except (TypeError, ValueError):
+                no = 0
+            if no < 1:  # bozuk round sayısı: çapa yazılmaz
+                self.harita, self.mac_evresi, self.round_evresi = harita, mac, rnd
+                return olaylar
             olaylar.append(Olay("round_basladi", simdi, harita, no, steamid))
         if mac == "gameover":
             bitir(harita)
@@ -154,7 +165,7 @@ def sunucu(port: int, token: str, izleyici: Izleyici, olay_geldi: Callable[[Olay
                 durum = json.loads(self.rfile.read(min(uzunluk, 1_000_000)) or b"{}")
             except ValueError:
                 return self._yanit(HTTPStatus.BAD_REQUEST)
-            if not isinstance(durum, dict) or durum.get("auth", {}).get("token") != token:
+            if not isinstance(durum, dict) or _sozluk(durum.get("auth")).get("token") != token:
                 return self._yanit(HTTPStatus.FORBIDDEN)
             for olay in izleyici.besle(durum):
                 olay_geldi(olay)

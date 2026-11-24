@@ -37,6 +37,8 @@ from onarim import is_repaired_copy
 ROOT = Path(__file__).resolve().parent
 DURUM_DOSYASI = ROOT / "otomatik.json"
 KILIT = ROOT / "kayit.kilit"
+# Kilidi tutan süreç (arayüz, kuyruk) klip.py'yi bu değişkenle başlatır; klip.py kilidi yeniden almaya çalışmaz.
+KILIT_TUTULUYOR = "CSKLIP_KILIT_TUTULUYOR"
 KARARLI_SN = 15  # dosya bu kadar süredir değişmiyorsa indirme bitmiş sayılır
 ARALIK_SN = 30
 SATIR = 40
@@ -218,7 +220,7 @@ class Izleyici:
 
 def klip_calistir(yol: Path, satir, ayarlar: Path | None = None, temizle: bool = False) -> int:
     """klip.py'yi ayrı süreçte çalıştırır, her satırı `satir`a verir, çıkış kodunu döner."""
-    env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+    env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", **{KILIT_TUTULUYOR: "1"})
     cmd = [sys.executable, str(ROOT / "klip.py"), str(yol)]
     if ayarlar:
         cmd += ["--ayarlar", str(ayarlar)]

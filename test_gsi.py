@@ -147,3 +147,12 @@ def test_cfg_guncel(tmp_path):
     gsi.cfg_yaz(tmp_path, 8770)
     assert gsi.cfg_guncel(tmp_path, 8770)
     assert not gsi.cfg_guncel(tmp_path, 8771)  # port değişti
+
+
+def test_bozuk_alanlar_cokertmez():
+    """provider/map/round nesne değilse (null, metin) olay üretmeden geçer; sunucu düşmez."""
+    iz = gsi.Izleyici()
+    assert iz.besle({"provider": None, "map": None, "round": None}) == []
+    assert iz.besle({"provider": "x", "map": "de_dust2", "round": 5}) == []
+    turler(iz, durum("live", "freezetime", 0))
+    assert iz.besle({**durum("live", "live", 0), "map": {"name": "de_dust2", "phase": "live", "round": "?"}}) == []

@@ -87,7 +87,14 @@ def video_baslangici(ffmpeg: Path, video: Path, calistir=subprocess.run) -> floa
 def oturum_yaz(dosya: Path, oturum: dict) -> None:
     tmp = dosya.with_name(dosya.name + ".tmp")
     tmp.write_text(json.dumps(oturum, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(dosya)
+    for deneme in range(20):  # Windows: başka biri (kes, arayüz) o an okuyorsa yerine yazma kısa süre reddedilir
+        try:
+            tmp.replace(dosya)
+            return
+        except PermissionError:
+            if deneme == 19:
+                raise
+            time.sleep(0.05)
 
 
 def oturum_oku(dosya: Path) -> dict | None:
@@ -112,31 +119,67 @@ class Kaydedici:
         self.oturum: dict = {}
         self.dosya: Path | None = None
         self.basarisiz = False  # ffmpeg bu maçta kendiliğinden kapandı: maç bitene kadar yeniden denenmez
+        self.bekleyen: threading.Timer | None = None  # maç bitti, kayıt birkaç saniye sonra kapanacak
         self.kilit = threading.Lock()
 
     @property
     def aktif(self) -> bool:
         return self.surec is not None
 
-    def baslat(self, harita: str, steamid: str) -> Path | None:
+    @property
+    def bitiyor(self) -> bool:
+        """Maç bitti, kayıt gecikmeli kapanmayı bekliyor."""
+        return self.bekleyen is not None
+
+    def gecikmeli_durdur(self, gecikme: float) -> None:
+        """Maç bitince son anlar da girsin diye kaydı gecikmeyle kapatır. Arada maç yeniden başlarsa baslat karar verir."""
         with self.kilit:
-            if self.surec is not None:
-                return self.dosya
-            if self.basarisiz:
-                return None
-            self.klasor.mkdir(parents=True, exist_ok=True)
-            ad = f"{datetime.now():%Y%m%d-%H%M%S}_{dosya_adi(harita)}"
-            video, self.dosya = self.klasor / f"{ad}.mkv", self.klasor / f"{ad}.json"
-            self.oturum = {"surum": SURUM, "video": video.name, "harita": harita, "steamid": steamid,
-                           "baslangic": self.saat(), "video_baslangic": None, "bitis": None, "roundlar": {}}
-            oturum_yaz(self.dosya, self.oturum)
-            # ffmpeg hataları dosyaya: boru dolarsa ffmpeg takılır.
-            with open(self.dosya.with_suffix(".log"), "w", encoding="utf-8") as gunluk:
-                self.surec = self.popen(kayit_komutu(self.ffmpeg, video, self.fps, self.kodlayici, self.ses),
-                                        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=gunluk,
-                                        text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            print(f"Kayıt başladı: {video}")
-            return self.dosya
+            if self.surec is None:
+                return
+            if self.bekleyen is not None:
+                self.bekleyen.cancel()
+            self.bekleyen = threading.Timer(gecikme, self.durdur, args=(self.dosya,))
+            self.bekleyen.daemon = True
+            self.bekleyen.start()
+
+    def baslat(self, harita: str, steamid: str) -> Path | None:
+        eski = None
+        try:
+            with self.kilit:
+                if self.surec is not None:
+                    if self.bekleyen is None or self.oturum.get("harita") == harita:
+                        # Süren maç ya da kapanmadan aynı haritaya geri dönüş (yeniden bağlanma): kayıt sürer.
+                        self._bekleyeni_iptal()
+                        return self.dosya
+                    # Önceki maç bitti, kapanmasını beklerken yeni harita başladı: eskisini arka planda kapat.
+                    eski = self._ayir()
+                return self._ac(harita, steamid)
+        finally:
+            if eski is not None:
+                threading.Thread(target=self._kapat, args=eski, daemon=True).start()
+
+    def _bekleyeni_iptal(self) -> None:
+        if self.bekleyen is not None:
+            self.bekleyen.cancel()
+            self.bekleyen = None
+
+    def _ac(self, harita: str, steamid: str) -> Path | None:
+        """Yeni kaydı açar. Kilit tutulurken çağrılır."""
+        if self.basarisiz:
+            return None
+        self.klasor.mkdir(parents=True, exist_ok=True)
+        ad = f"{datetime.now():%Y%m%d-%H%M%S}_{dosya_adi(harita)}"
+        video, self.dosya = self.klasor / f"{ad}.mkv", self.klasor / f"{ad}.json"
+        self.oturum = {"surum": SURUM, "video": video.name, "harita": harita, "steamid": steamid,
+                       "baslangic": self.saat(), "video_baslangic": None, "bitis": None, "roundlar": {}}
+        oturum_yaz(self.dosya, self.oturum)
+        # ffmpeg hataları dosyaya: boru dolarsa ffmpeg takılır.
+        with open(self.dosya.with_suffix(".log"), "w", encoding="utf-8") as gunluk:
+            self.surec = self.popen(kayit_komutu(self.ffmpeg, video, self.fps, self.kodlayici, self.ses),
+                                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=gunluk,
+                                    text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        print(f"Kayıt başladı: {video}")
+        return self.dosya
 
     def round_basladi(self, no: int, zaman: float) -> None:
         with self.kilit:
@@ -173,10 +216,20 @@ class Kaydedici:
         with self.kilit:
             if self.surec is None or (dosya is not None and dosya != self.dosya):
                 return
-            # Yerel kopyalar: ffmpeg beklenirken yeni maç başlarsa self.dosya / self.oturum değişir.
-            surec, self.surec, dosya, oturum = self.surec, None, self.dosya, self.oturum
-            oturum["bitis"] = self.saat()
-            oturum_yaz(dosya, oturum)
+            parca = self._ayir()
+        self._kapat(*parca)
+
+    def _ayir(self) -> tuple:
+        """Süren kaydı Kaydedici'den ayırır (kilit tutulurken): yeni kayıt hemen açılabilir, eskisi sonra kapatılır."""
+        self._bekleyeni_iptal()
+        # Yerel kopyalar: ffmpeg beklenirken yeni maç başlarsa self.dosya / self.oturum değişir.
+        surec, self.surec, dosya, oturum = self.surec, None, self.dosya, self.oturum
+        oturum["bitis"] = self.saat()
+        oturum_yaz(dosya, oturum)
+        return surec, dosya, oturum
+
+    def _kapat(self, surec, dosya: Path, oturum: dict) -> None:
+        """Ayrılmış kaydın ffmpeg'ini düzgün kapatır ve videonun başlangıç saatini yazar."""
         try:
             surec.stdin.write("q")  # ffmpeg'i düzgün kapatır; mkv yarıda kesilse de okunur
             surec.stdin.flush()
@@ -251,9 +304,10 @@ def olay_isle(o: gsi.Olay, kaydedici: Kaydedici, kayit_suruyor=None) -> None:
         kayit_suruyor = lambda: otomatik.kilit_dolu(otomatik.KILIT)  # noqa: E731
     if o.tur == "mac_bitti":
         kaydedici.mac_bitti()
-        threading.Timer(DURDURMA_GECIKMESI, kaydedici.durdur, args=(kaydedici.dosya,)).start()
+        kaydedici.gecikmeli_durdur(DURDURMA_GECIKMESI)
         return
-    if not kaydedici.aktif:
+    # Kapanmayı bekleyen kayıt varken maç yeniden başladıysa baslat karar verir: aynı harita sürer, yenisi ayrı kayıt.
+    if not kaydedici.aktif or kaydedici.bitiyor:
         if kayit_suruyor():
             return
         kaydedici.baslat(o.harita, o.steamid)
