@@ -495,7 +495,8 @@ class Kurulum:
         if not self.venv_py.is_file():  # provada sanal ortam henüz yok
             self.calistir(komut, cwd=self.root)
             return
-        r = self.yokla(komut + ["--kontrol"], cwd=self.root)
+        # canli.py çıktısı UTF-8 (sys.stdout.reconfigure); konsolun kod sayfasıyla okunursa Türkçe bozulur.
+        r = self.yokla(komut + ["--kontrol"], cwd=self.root, encoding="utf-8")
         cikti = (r.stdout + r.stderr).strip().splitlines()
         if r.returncode == 0:
             self.tamam(cikti[0] if cikti else "GSI dosyası güncel.")
@@ -504,7 +505,7 @@ class Kurulum:
             self.uyari((cikti[-1] if cikti else "GSI dosyası denetlenemedi.") + " CS2 kurulunca: canli.bat kur")
             return
         self.yap("CS2 cfg klasörüne yazılıyor")
-        r = self.calistir(komut, cwd=self.root, capture_output=True, text=True, errors="replace")
+        r = self.calistir(komut, cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r is not None and r.returncode != 0:
             raise KurulumHatasi("GSI dosyası yazılamadı: " + (r.stdout + r.stderr).strip())
         if r is not None:
