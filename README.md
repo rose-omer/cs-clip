@@ -18,6 +18,16 @@ silah dağılımı ve kliplerin kendisi.
 |---|---|---|
 | ![En iyi anlarım](docs/5-en-iyi-anlar.png) | ![Kariyer](docs/6-kariyer.png) | ![Ayarlar](docs/7-ayarlar.png) |
 
+Puanlama ve kayıt yenilikleri:
+
+| Puan dökümü ve bağlam etiketleri | Kayıt sürerken Durdur |
+|---|---|
+| ![Klip kartları: açılış ve ekonomi farkı etiketleri, açık puan dökümü](docs/8-klipler-puan-dokumu.png) | ![Kayıt ilerlemesi ve Durdur düğmesi](docs/9-kayit-durdur.png) |
+
+| Ayarlar: CS2 kaydı, FACEIT, canlı kayıt | Maç özeti (güncel) |
+|---|---|
+| ![Ayarlar sayfasının yeni bölümleri](docs/10-ayarlar-yeni-bolumler.png) | ![Güncel maç özeti](docs/11-mac-ozeti-guncel.png) |
+
 ## Kullanım
 
 ![Kullanım: maç seçme, sekmeler, en iyi anlar ve kariyer](docs/kullanim.gif)
