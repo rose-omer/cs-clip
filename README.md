@@ -109,6 +109,38 @@ arayüz kayıttan önce kendisi başlatır.
 Diğer: `otomatik.py durum` (sırayı gösterir), `otomatik.py ekle <demo>` (elle sıraya ekler), `--temizle` (kaydı biten
 demoyu Geri Dönüşüm Kutusu'na taşır), `arayuz.bat --otomatik` (izleyiciyi arayüzle aynı pencerede çalıştırır).
 
+## Canlı kayıt (FACEIT açıkken, deneme)
+
+CS2'ye dokunmadan, oynarken kaydeder. FACEIT kapatılmaz, CS Demo Manager ve PostgreSQL gerekmez.
+
+1. `canli.bat kur`: CS2'nin `game\csgo\cfg` klasörüne `gamestate_integration_csklip.cfg` yazılır. CS2'yi yeniden aç.
+2. `canli.bat` (= `canli.py izle`) açık kalsın. Maç başlayınca kayıt kendiliğinden başlar, bitince durur.
+   Ham kayıt `kayitlar/` klasörüne yazılır.
+3. Maç bitince demoyu indir, sonra `canli.bat kes <demo>` çalıştır. En iyi anlar kayıttan kesilir ve `klipler/`
+   klasörüne yazılır. Klip adları CSDM klipleriyle aynı biçimdedir.
+
+Nasıl çalışır:
+- Görüntü: FFmpeg `ddagrab` (Windows Desktop Duplication) + NVENC. Oyun sürecine enjeksiyon yoktur.
+  Kodlama ekran kartının ayrı yongasında yapılır.
+- Zaman: CS2'nin resmi GSI'si her round'un başladığı anı `127.0.0.1:8770` adresine bildirir. Her kare kendi duvar
+  saatini taşır. Round başlangıcı demodaki `round_freeze_end` tick'iyle eşlenir.
+- Eşleme: demoya uyan kayıt, ardışık round sürelerinin karşılaştırılmasıyla bulunur (en az 3 round, ortanca fark
+  2 sn altında). Elle seçmek için: `--kayit kayitlar\<ad>.json`.
+
+| Ayar | Varsayılan | Ne yapar |
+|---|---|---|
+| `canli_klasoru` | `kayitlar` | Ham kayıtlar ve oturum dosyaları |
+| `canli_port` | 8770 | GSI portu; değişirse `canli.bat kur` yeniden çalıştırılır |
+| `canli_fps` | 60 | Kayıt kare hızı (oyun FPS'inden bağımsız) |
+| `canli_kodlayici` | `h264_nvenc` | `hevc_nvenc` / `av1_nvenc` de olur |
+| `canli_ses` | boş | DirectShow ses cihazı (ör. "Stereo Mix"); boşsa sessiz |
+
+Sınırlar:
+- Görüntü yalnız kaydı yapanın gözünden. Başka oyuncunun gözü için CSDM kaydı gerekir.
+- Uygulama açıkken oynanan maçlar kaydedilir. Ses için bir loopback cihazı gerekir.
+- Kesim yeniden kodlama yapmaz: klip en fazla 1 sn erken başlar (anahtar kare saniyede bir).
+- Maç başına geçici olarak birkaç GB disk kullanılır. Ham kayıt şimdilik elle silinir.
+
 ## Komutlar
 
 | Komut | Ne yapar |
@@ -195,6 +227,7 @@ onarılır (`<ad>.onarilmis.dem`) ve her parça ayrı CS2 açılışında kayded
 | `arayuz.py`, `arayuz/` | Yerel web arayüzü: sunucu ve sayfa (`ayarlar.js`: Ayarlar sayfası) |
 | `config.py` | `ayarlar.json` okur, doğrular, yazar |
 | `araclar/` | Hız ölçüm ve deneme script'leri, CSDM ayar şablonu |
+| `canli.py`, `canli.bat`, `gsi.py` | Canlı kayıt: GSI dinleyici, ekran kaydı, demoyla eşleme ve kesim |
 | `analiz_derin.py` | Isı haritası konumları, utility ve nişan metrikleri (`stats.json` içindeki `derin`) |
 | `tasarimlar/` | Arayüz tasarım taslakları |
 | `docs/` | Ekran görüntüleri |

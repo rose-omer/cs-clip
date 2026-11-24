@@ -23,6 +23,11 @@ DEFAULTS = {
     "faceit_api_anahtari": "",  # FACEIT Data API anahtarı (developers.faceit.com); otomatik.py faceit
     "faceit_kullanici": "",  # FACEIT kullanıcı adı; boşsa "oyuncu"
     "kayit_sistemi": "CS",  # CSDM kayıt sistemi: "CS" ya da "HLAE"; HLAE kuruluysa CS takılınca son çare olarak denenir
+    "canli_klasoru": "kayitlar",  # canlı kayıt: ham maç kayıtları ve oturum dosyaları
+    "canli_port": 8770,  # CS2 GSI'nin durum gönderdiği yerel port (yalnız 127.0.0.1)
+    "canli_fps": 60,  # kayıt kare hızı; oyun FPS'inden bağımsız
+    "canli_kodlayici": "h264_nvenc",  # h264_nvenc | hevc_nvenc | av1_nvenc
+    "canli_ses": "",  # DirectShow ses cihazı (ör. "Stereo Mix (Realtek(R) Audio)"); boşsa sessiz
 }
 
 # OBS/netcon dönemi ayarları: eski ayarlar.json bozulmasın diye yok sayılır.
