@@ -1,5 +1,5 @@
 /* cs-klip arayüzü — Ayarlar sayfası (#ayarlar): GET/POST /api/ayarlar.
-   app.js yönlendirir ve window.csklip yardımcılarını (api, bildir, esc, ikon) verir. */
+   js/gezinme.js yönlendirir ve window.csklip yardımcılarını (api, bildir, esc, ikon) verir. */
 (() => {
   'use strict';
 

@@ -525,7 +525,7 @@ def test_yukleme_adinda_iki_nokta_reddedilir(server):
 
 
 def test_ornek_veri_gomulu_kopyayla_ayni():
-    """app.js'teki gömülü kopya (index.html çift tıklanınca kullanılır) ornek.json'la aynı kalmalı."""
+    """js/ornek.js'teki gömülü kopya (index.html çift tıklanınca kullanılır) ornek.json'la aynı kalmalı."""
     web = arayuz.ROOT / "arayuz"
-    satir = (web / "app.js").read_text(encoding="utf-8").split("/*ORNEK_BASLA*/", 1)[1].split("/*ORNEK_BITIR*/", 1)[0]
+    satir = (web / "js" / "ornek.js").read_text(encoding="utf-8").split("/*ORNEK_BASLA*/", 1)[1].split("/*ORNEK_BITIR*/", 1)[0]
     assert json.loads(satir) == json.loads((web / "ornek.json").read_text(encoding="utf-8"))
