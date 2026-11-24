@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-from highlights import POST_SECONDS, PRE_SECONDS, TICKRATE, find_highlights
+from highlights import POST_SECONDS, PRE_SECONDS, TEAM_SIZE, TICKRATE, find_highlights
 
 TAG_PREFIX = "p-"  # klip adındaki oyuncu etiketi: ..._R05_p-Mert06_4K.mp4
 TAG_MAX = 20
@@ -41,12 +41,32 @@ def highlights_path(demo: Path, steamid: str | None = None) -> Path:
     return demo.with_suffix(f".highlights.{steamid}.json")
 
 
+# Bağlam puanları için (highlights._context): kill anında can ve ekipman değeri. Bu demoda okunamazsa
+# yalnız team_num istenir; ilgili ölçütler atlanır.
+CONTEXT_PROPS = ["team_num", "health", "current_equip_value"]
+
+
+def team_size(players) -> int:
+    """Takım başına oyuncu (5v5: 5, wingman: 2). İzleyici ve koçlar (takım 2/3 dışı) sayılmaz."""
+    if "team_number" not in players.columns:
+        return TEAM_SIZE
+    counts = players[players["team_number"].isin([2, 3])].drop_duplicates("steamid")["team_number"].value_counts()
+    return int(min(TEAM_SIZE, max(counts.max() if len(counts) else TEAM_SIZE, 1)))
+
+
+def _kills(parser):
+    try:
+        return parser.parse_event("player_death", player=CONTEXT_PROPS, other=["total_rounds_played"])
+    except Exception:  # noqa: BLE001 — demoparser2 bilinmeyen alan için genel Exception atar
+        return parser.parse_event("player_death", player=["team_num"], other=["total_rounds_played"])
+
+
 def _load(demo: Path):
     from demoparser2 import DemoParser
 
     parser = DemoParser(str(demo))
     players = parser.parse_player_info()
-    kills = parser.parse_event("player_death", player=["team_num"], other=["total_rounds_played"])
+    kills = _kills(parser)
     starts = parser.parse_event("begin_new_match")
     match_start = int(starts["tick"].max()) if len(starts) else 0
     round_ends = parser.parse_event("round_end")
@@ -74,7 +94,8 @@ def analyze_player(
         raise _missing(players, player)
     names = {str(r.steamid): str(r.name) for r in players.itertuples()}
     is_default = default is None or resolve_steamid(players, default) == steamid
-    hl = find_highlights(kills, steamid, 0, match_start, round_ends, pre_seconds, post_seconds)
+    hl = find_highlights(kills, steamid, 0, match_start, round_ends, pre_seconds, post_seconds,
+                         team_size(players))
     return {"harita": map_name, "steamid": steamid, "ad": names.get(steamid, steamid),
             "varsayilan": is_default, "highlights": hl}
 
@@ -85,12 +106,13 @@ def analyze_all(
     """Demodaki her oyuncunun highlight'ları tek ayrıştırmayla: {harita, oyuncular: [analyze_player sonucu]}."""
     map_name, players, kills, match_start, round_ends = _load(demo)
     default_sid = resolve_steamid(players, default) if default else None
+    size = team_size(players)
     rows = []
     for r in players.drop_duplicates("steamid").itertuples():
         sid = str(r.steamid)
         if sid in ("", "0", "nan", "None"):
             continue
-        hl = find_highlights(kills, sid, 0, match_start, round_ends, pre_seconds, post_seconds)
+        hl = find_highlights(kills, sid, 0, match_start, round_ends, pre_seconds, post_seconds, size)
         rows.append({"harita": map_name, "steamid": sid, "ad": str(r.name), "varsayilan": sid == default_sid,
                      "highlights": hl})
     return {"harita": map_name, "oyuncular": rows}

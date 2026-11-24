@@ -560,6 +560,13 @@ td.soluk{color:var(--muted)}
 .kl-puan-bar{height:3px;background:var(--line)}
 .kl-puan-bar i{display:block;height:100%;width:var(--p);background:linear-gradient(90deg,var(--or-d),var(--or));transform-origin:left;animation:buyu .8s .2s var(--ease) both}
 .kl-etiketler{display:flex;flex-wrap:wrap;gap:5px}
+.etk.ozel{background:transparent;border:1px dashed var(--line2);color:var(--orta)}
+.kl-dokum{margin-top:8px;font-size:12px;color:var(--muted)}
+.kl-dokum summary{cursor:pointer;width:max-content}
+.kl-dokum summary:focus-visible{outline:2px solid var(--or);outline-offset:2px}
+.kl-dokum ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:2px}
+.kl-dokum li{display:flex;justify-content:space-between;gap:12px}
+.kl-dokum b{color:var(--text);font-variant-numeric:tabular-nums}
 .etk{display:inline-flex;align-items:center;height:22px;padding:0 8px;background:var(--panel3);color:var(--orta);font:700 12px/1 var(--f-disp);letter-spacing:.08em;text-transform:uppercase}
 .etk.clutch{background:var(--or);color:#160900}
 .etk.kill{background:#2b3346;color:#fff;box-shadow:inset 2px 0 0 var(--or)}

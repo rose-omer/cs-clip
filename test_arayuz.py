@@ -216,8 +216,9 @@ def test_settings_get_and_save(server, tmp_path):
 
     # oyuncu değişince o demonun önbellekleri silinir, diğer dosyalar kalır
     (demos / "1-aaaa1111-x-1-1.dem").write_bytes(b"d")
-    for ext in (".highlights.json", ".stats.json"):
+    for ext in (".highlights.json", ".highlights.76561198000000002.json", ".stats.json"):
         (demos / f"1-aaaa1111-x-1-1{ext}").write_text("[]", encoding="utf-8")
+    (demos / "1-bbbb-x-1-1.highlights.7656.json").write_text("[]", encoding="utf-8")  # demosu yok: dokunulmaz
     new_out = tmp_path / "yeni_klipler"
     status, body = send_settings(url + "/api/ayarlar", {"oyuncu": "baskasi", "once_sn": 4, "cikti_klasoru": str(new_out)})
     assert status == 200, body
@@ -225,6 +226,8 @@ def test_settings_get_and_save(server, tmp_path):
     assert json.loads(a.settings_path.read_text(encoding="utf-8"))["once_sn"] == 4
     assert a.cfg["oyuncu"] == "baskasi" and a.out_dir == new_out.resolve()
     assert not (demos / "1-aaaa1111-x-1-1.stats.json").exists()
+    assert not (demos / "1-aaaa1111-x-1-1.highlights.76561198000000002.json").exists()  # diğer oyuncunun listesi
+    assert (demos / "1-bbbb-x-1-1.highlights.7656.json").exists()
     assert (demos / "1-aaaa1111-x-1-1.dem").exists()
 
     # yalnız montaj değişince önbelleğe dokunulmaz
@@ -247,7 +250,8 @@ def test_settings_rejects_invalid_without_writing(server, tmp_path):
 def test_settings_bad_json(server, tmp_path):
     url, (a, _, _) = server
     a.settings_path = tmp_path / "ayarlar.json"
-    req = urllib.request.Request(url + "/api/ayarlar", data=b"{bozuk", method="POST")
+    req = urllib.request.Request(url + "/api/ayarlar", data=b"{bozuk", method="POST",
+                                 headers={"Content-Type": "application/json"})
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(req)
     assert e.value.code == 400
@@ -346,3 +350,64 @@ def test_old_stats_json_is_served_and_can_be_recomputed(server, monkeypatch):
     assert status == 200 and body["derin"] == {"surum": 1} and len(calls) == 1
     saved = json.loads((demos / f"{did}.stats.json").read_text(encoding="utf-8"))
     assert saved["derin"] == {"surum": 1}
+
+
+# --- başka siteden gelen istekler ---
+
+@pytest.mark.parametrize("rel,ok", [
+    ("a.mp4", True), ("alt/a.mp4", True), ("//saldirgan/pay/x.mp4", False), (r"\\saldirgan\pay\x.mp4", False),
+    ("C:/Windows/win.ini", False), ("../gizli.txt", False), ("a/../../b", False), ("", False)])
+def test_safe_relative(rel, ok):
+    assert arayuz.safe_relative(rel) is ok
+
+
+@pytest.mark.parametrize("yol", ["/klip///saldirgan/pay/x.mp4", "/klip/%5c%5csaldirgan%5cpay%5cx.mp4",
+                                 "/%5c%5csaldirgan%5cpay%5cx.js"])
+def test_unc_yolu_diske_dokunmadan_reddedilir(server, monkeypatch, yol):
+    url, _ = server
+    dokunulan = []
+    monkeypatch.setattr(arayuz.Path, "resolve", lambda self, *a: dokunulan.append(self) or self)
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(url + yol)
+    assert e.value.code == 404
+    assert not any(str(p).startswith(("\\\\", "//")) for p in dokunulan)
+
+
+def istek(url, method="GET", headers=None, data=None):
+    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def test_baska_host_adi_reddedilir(server):
+    url, _ = server
+    assert istek(url + "/api/demolar", headers={"Host": "saldirgan.example:80"}) == 403
+    port = url.rsplit(":", 1)[1]
+    assert istek(url + "/api/demolar", headers={"Host": f"localhost:{port}"}) == 200
+
+
+def test_baska_siteden_post_reddedilir(server, tmp_path):
+    url, (a, _, _) = server
+    a.settings_path = tmp_path / "ayarlar.json"
+    govde = json.dumps({"montaj": False}).encode()
+    json_basligi = {"Content-Type": "application/json"}
+    assert istek(url + "/api/ayarlar", "POST", {**json_basligi, "Origin": "https://saldirgan.example"}, govde) == 403
+    assert istek(url + "/api/ayarlar", "POST", {"Content-Type": "text/plain"}, govde) == 415
+    assert not a.settings_path.exists()
+    assert istek(url + "/api/ayarlar", "POST", {**json_basligi, "Origin": url}, govde) == 200
+
+
+def test_gecersiz_content_length(server):
+    url, _ = server
+    req = urllib.request.Request(url + "/api/ayarlar", data=b"{}", method="POST",
+                                 headers={"Content-Type": "application/json"})
+    req.add_unredirected_header("Content-Length", "abc")
+    try:
+        urllib.request.urlopen(req)
+        kod = 200
+    except urllib.error.HTTPError as e:
+        kod = e.code
+    assert kod == 400
