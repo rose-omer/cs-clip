@@ -280,8 +280,7 @@ def test_gecikmeli_durdurma_kaydi_kapatir(tmp_path):
     k = kaydedici(tmp_path, [s])
     k.baslat("de_dust2", "765")
     k.gecikmeli_durdur(0.01)
-    for _ in range(100):
-        if not k.aktif:
-            break
-        time.sleep(0.02)
+    zamanlayici = k.bekleyen
+    zamanlayici.join(timeout=5)  # aktif, "q" yazılmadan False olur; durdur() bitene kadar bekle
+    assert not zamanlayici.is_alive()
     assert not k.aktif and not k.bitiyor and s.stdin.getvalue() == "q"
