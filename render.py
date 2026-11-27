@@ -311,9 +311,10 @@ def record_demo(
         return []
 
     folders = {Path(demo).parent, out_dir}  # CSDM çıktı klasörü ayarını her zaman uygulamıyor
+    existing_dirs = set(part_dirs(folders, 0))  # kayıttan önce var olan alt klasörler: silinmez
 
     def new_parts(since: float) -> list[Path]:
-        return [p for d in folders if d.is_dir() for p in d.glob("sequence-*.mp4") if p.stat().st_mtime >= since]
+        return [p for d in part_dirs(folders, since) for p in d.glob("sequence-*.mp4") if p.stat().st_mtime >= since]
 
     def run(cmd, timeout) -> str | None:
         code, lines = runner(cmd, env, timeout)
@@ -402,7 +403,37 @@ def record_demo(
             print(f"  ! R{h['round']} için video çıkmadı")
     for p in new_parts(started):  # atlanan kliplerin yarım parçaları
         p.unlink(missing_ok=True)
+    remove_empty_part_dirs(folders, started, existing_dirs)
     return done
+
+
+def part_dirs(folders, since: float) -> list[Path]:
+    """Parçaların aranacağı klasörler: verilenler ve onlarda `since`ten sonra oluşan alt klasörler.
+
+    CSDM 3.21'den beri her video üretimi çıktı klasöründe kendi alt klasörüne (ör. c567232d-…) yazılır.
+    """
+    out = []
+    for d in folders:
+        d = Path(d)
+        if not d.is_dir():
+            continue
+        out.append(d)
+        out += [s for s in d.iterdir() if s.is_dir() and s.stat().st_mtime >= since]
+    return out
+
+
+CSDM_RUN_DIR_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+
+
+def remove_empty_part_dirs(folders, since: float, existing: set) -> None:
+    """CSDM'in bu kayıtta açtığı (uuid adlı) ve parçalar taşınınca boş kalan alt klasörleri siler."""
+    for d in part_dirs(folders, since):
+        if d in existing or not CSDM_RUN_DIR_RE.fullmatch(d.name):
+            continue
+        try:
+            d.rmdir()  # yalnız boşsa siler
+        except OSError:
+            pass
 
 
 def make_montage(paths: list[Path], out: Path, ffmpeg: Path | str | None = None) -> Path | None:

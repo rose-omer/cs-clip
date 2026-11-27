@@ -340,3 +340,25 @@ def test_record_demo_does_not_launch_while_cs2_still_open(tmp_path):
 def test_record_demo_rejects_unknown_recording_system(tmp_path):
     with pytest.raises(ValueError, match="kayıt sistemi"):
         record_demo(tmp_path / "m.dem", [H], "765", "x", tmp_path, Path("csdm"), None, 3, 2, True, system="OBS")
+
+
+def test_record_demo_finds_parts_in_csdm_321_subfolder(tmp_path):
+    """CSDM 3.21+ parçaları çıktı klasöründe yeni bir alt klasöre yazar; bulunur, taşınır, boş klasör silinir."""
+    demo = tmp_path / "m.dem"
+    demo.write_bytes(b"d")
+    out = tmp_path / "klipler"
+    out.mkdir()
+    old = tmp_path / "eski-klasor"
+    old.mkdir()
+    clips = [{**H, "round": 9, "labels": ["3K"], "segments": [[9000, 9400]]}]
+
+    def runner(cmd, env, timeout):
+        sub = tmp_path / "c567232d-63e9-4c84-8c24-116cf1a3c973"
+        sub.mkdir()
+        seq(sub, 1, 9000, 9400)
+        return 0, ["✔ Video generated in " + str(sub)]
+
+    made = record_demo(demo, clips, "765", "x", out, Path("csdm"), None, 3, 2, True, runner=runner)
+    assert [p.name for p in made] == ["x_R09_3K.mp4"]
+    assert not (tmp_path / "c567232d-63e9-4c84-8c24-116cf1a3c973").exists()
+    assert old.is_dir()  # önceden var olan klasöre dokunulmaz
