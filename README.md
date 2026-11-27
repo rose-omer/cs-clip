@@ -136,10 +136,13 @@ CS2'ye dokunmadan, oynarken kaydeder. FACEIT kapatılmaz, CS Demo Manager ve Pos
    (devre arasında da) çıkınca ya da CS2 60 sn haber vermezse durur. Ham kayıt `kayitlar/` klasörüne yazılır.
    - ffmpeg kendiliğinden kapanırsa (NVENC yok, ses cihazı yanlış) birkaç saniye içinde hata ve ffmpeg günlüğü
      yazılır; o maç yeniden denenmez.
-   - CSDM ile demo kaydı sürerken (arayüz ya da otomatik kuyruk) ekran kaydı açılmaz.
+   - CSDM ile demo kaydı sürerken (arayüz, otomatik kuyruk ya da `klip.bat`) ekran kaydı açılmaz.
    - Maç ortasında açılırsa yarım round'a çapa yazılmaz; kayıt sonraki round'dan geçerli olur.
-3. Maç bitince demoyu indir, sonra `canli.bat kes <demo>` çalıştır. En iyi anlar kayıttan kesilir ve `klipler/`
-   klasörüne yazılır. Klip adları CSDM klipleriyle aynı biçimdedir.
+3. Maç bitince demoyu indir ve arayüzde aç. O maçın canlı kaydı varsa "Klipler" bölümünde **Canlı kayıt bulundu**
+   yazar ve düğme **Kayıttan kes** olur: en iyi anlar CS2 açılmadan kayıttan kesilip `klipler/` klasörüne yazılır
+   (FACEIT açık kalabilir). Kayıt yoksa düğme eskisi gibi CS2 ile kaydeder. Başka bir oyuncunun anları her zaman
+   CS2 ile kaydedilir (canlı kayıt yalnız senin gözünden). Komut satırından: `canli.bat kes <demo> [--en-iyi 3]`.
+   Klip adları CSDM klipleriyle aynı biçimdedir.
 
 Nasıl çalışır:
 - Görüntü: FFmpeg `ddagrab` (Windows Desktop Duplication) + NVENC. Oyun sürecine enjeksiyon yoktur.

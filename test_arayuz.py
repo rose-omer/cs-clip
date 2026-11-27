@@ -554,3 +554,72 @@ def test_ornek_veri_gomulu_kopyayla_ayni():
     web = arayuz.ROOT / "arayuz"
     satir = (web / "js" / "ornek.js").read_text(encoding="utf-8").split("/*ORNEK_BASLA*/", 1)[1].split("/*ORNEK_BITIR*/", 1)[0]
     assert json.loads(satir) == json.loads((web / "ornek.json").read_text(encoding="utf-8"))
+
+
+# --- canlı kayıttan kesim (CS2 açılmadan) ---
+
+DID = "1-aaaa1111-x-1-1"
+
+
+@pytest.fixture
+def live(app, monkeypatch, tmp_path):
+    """Demoya uyan sahte canlı kayıt; eşleme kaç kez çağrıldı sayılır."""
+    a, demos, _ = app
+    (demos / f"{DID}.dem").write_bytes(b"d")
+    folder = tmp_path / "kayitlar"
+    folder.mkdir()
+    a.cfg["canli_klasoru"] = str(folder)
+    calls = []
+
+    def eslesen(demo, klasor):
+        calls.append(demo)
+        return {"kayit": folder / "20261127-210000_de_inferno.json", "video": "20261127-210000_de_inferno.mkv",
+                "harita": "de_inferno", "roundlar": 19, "fark": 0.12}
+
+    monkeypatch.setattr(arayuz.canli, "eslesen_kayit", eslesen)
+    monkeypatch.setattr(a, "player_highlights", lambda did, who=None: {
+        "steamid": "765", "ad": "ben", "varsayilan": who is None, "highlights": []})
+    return a, calls
+
+
+def test_klipler_canli_kaydi_gosterir_ve_onbellekte_tutar(live):
+    a, calls = live
+    info = a.clips(DID)["canli"]
+    assert info["video"] == "20261127-210000_de_inferno.mkv" and info["roundlar"] == 19
+    a.clips(DID)
+    assert len(calls) == 1  # yoklama her 2 sn'de bir sorar: demo yeniden ayrıştırılmaz
+    assert a.clips(DID, "baskasi")["canli"] is None  # kayıt yalnız kaydedenin gözünden
+
+
+def test_canli_kayit_varsa_cs2_acmadan_keser(server, live, monkeypatch):
+    url, _ = server
+    a, _ = live
+    monkeypatch.setattr(arayuz, "preflight", lambda *x, **k: pytest.fail("CS2 açılmayacak: ön kontrol gerekmez"))
+    started = threading.Event()
+    got = {}
+    monkeypatch.setattr(a, "_record", lambda path, best, player=None, cmd=None: (got.update(cmd=cmd), started.set()))
+    status, data = post_json(f"{url}/api/demo/{DID}/kaydet", {"en_iyi": 3})
+    assert status == 200 and data["kaynak"] == "canli" and a.job["kaynak"] == "canli"
+    assert started.wait(5)
+    cmd = got["cmd"]
+    assert cmd[1].endswith("canli.py") and cmd[cmd.index("kes") + 1].endswith(f"{DID}.dem")
+    assert cmd[cmd.index("--kayit") + 1].endswith("20261127-210000_de_inferno.json") and cmd[-2:] == ["--en-iyi", "3"]
+
+
+def test_cs2_secilirse_canli_kayit_kullanilmaz(server, live, monkeypatch):
+    url, _ = server
+    a, _ = live
+    monkeypatch.setattr(arayuz, "find_csgo_dir", lambda: None)
+    monkeypatch.setattr(arayuz, "preflight", lambda *x, **k: ({}, ["FACEIT açık."]))
+    code, data = post_error(f"{url}/api/demo/{DID}/kaydet", {"en_iyi": 3, "kaynak": "cs2"})
+    assert code == 409 and "başlayamaz" in data["hata"]
+
+
+def test_canli_istenip_kayit_yoksa_409(server, app, monkeypatch):
+    url, (a, demos, _) = server
+    (demos / f"{DID}.dem").write_bytes(b"d")
+    monkeypatch.setattr(arayuz.canli, "eslesen_kayit", lambda demo, klasor: None)
+    code, data = post_error(f"{url}/api/demo/{DID}/kaydet", {"en_iyi": 3, "kaynak": "canli"})
+    assert code == 409 and "canlı kayıt yok" in data["hata"]
+    code, _ = post_error(f"{url}/api/demo/{DID}/kaydet", {"en_iyi": 3, "kaynak": "bilinmez"})
+    assert code == 400

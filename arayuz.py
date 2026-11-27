@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PureWindowsPath
 from urllib.parse import parse_qs, unquote, urlparse
 
+import canli
 import eniyi
 import kariyer
 import otomatik
@@ -82,6 +83,7 @@ class App:
         self.proc: subprocess.Popen | None = None  # süren kaydın klip.py süreci (durdurmak için)
         self.stop_requested = False
         self._demo_cache: tuple[tuple, dict[str, Path]] | None = None
+        self._live_cache: dict[str, tuple[tuple, dict | None]] = {}  # demo id -> (anahtar, eşleşen canlı kayıt)
         self.montage_lock = threading.Lock()
         self.kilit = otomatik.KILIT  # otomatik kuyrukla paylaşılan kayıt kilidi
         self.oto_dosya = otomatik.DURUM_DOSYASI
@@ -274,7 +276,35 @@ class App:
         info = {k: player[k] for k in ("steamid", "ad", "varsayilan")}
         if not player["varsayilan"]:
             info["etiket"] = TAG_PREFIX + player_tag(player["ad"], player["steamid"])
-        return {"highlightlar": rows, "kayit": job, "oyuncu": info}
+        # Canlı kayıt yalnız kaydı yapanın (varsayılan oyuncu) gözünden: başka oyuncunun anları CS2 ile kaydedilir.
+        live = self.live_recording(did) if player["varsayilan"] else None
+        return {"highlightlar": rows, "kayit": job, "oyuncu": info, "canli": live}
+
+    def live_recording(self, did: str) -> dict | None:
+        """Demoya uyan canlı kayıt (canli.py): {kayit, video, roundlar, fark}; yoksa None.
+
+        Demo ayrıştırması sürdüğü için sonuç önbellekte: demo ya da kayıt klasörü değişince yeniden bakılır.
+        """
+        folder = Path(self.cfg["canli_klasoru"])
+        if not folder.is_absolute():
+            folder = ROOT / folder
+        try:
+            demo = self.demo_path(did)
+            key = (str(folder), demo.stat().st_mtime_ns, folder.stat().st_mtime_ns if folder.is_dir() else None)
+        except (ApiError, OSError):
+            return None
+        cached = self._live_cache.get(did)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        try:
+            found = canli.eslesen_kayit(demo, folder)
+        except Exception:  # noqa: BLE001 — eşleme bozulursa kayıt yine CS2 ile yapılabilsin
+            found = None
+        info = None if found is None else {
+            "kayit": found["kayit"].name, "video": found["video"], "roundlar": found["roundlar"], "fark": found["fark"],
+            "dosya": str(found["kayit"])}
+        self._live_cache[did] = (key, info)
+        return info
 
     def everyone(self, did: str) -> dict:
         """Maçtaki her oyuncunun en iyi anı (skor eşiğini geçenlerden), en yüksek puan önce."""
@@ -390,10 +420,28 @@ class App:
         return kariyer.career(self.folders, self.demos())
 
     # --- kayıt ---
-    def start_recording(self, did: str, best: int, player: str | None = None) -> dict:
-        """player: ad ya da SteamID64 (klip.py --oyuncu); boşsa ayarlar.json'daki oyuncu."""
+    def start_recording(self, did: str, best: int, player: str | None = None, source: str = "otomatik") -> dict:
+        """player: ad ya da SteamID64 (klip.py --oyuncu); boşsa ayarlar.json'daki oyuncu.
+
+        source: "otomatik" (canlı kayıt varsa ondan kes, yoksa CS2 ile kaydet), "canli" ya da "cs2".
+        Canlı kayıttan kesmek CS2'yi açmaz: FACEIT açık kalabilir, ön kontrol gerekmez.
+        """
         if self.job["durum"] == "calisiyor":
             raise ApiError(HTTPStatus.CONFLICT, "Başka bir kayıt sürüyor.")
+        live = self.live_recording(did) if source != "cs2" and not player else None
+        if source == "canli" and live is None:
+            raise ApiError(HTTPStatus.CONFLICT, "Bu demoya uyan canlı kayıt yok.")
+        if live is not None:
+            path = self.demo_path(did)
+            with self.lock:
+                if self.job["durum"] == "calisiyor":
+                    raise ApiError(HTTPStatus.CONFLICT, "Başka bir kayıt sürüyor.")
+                self.stop_requested = False
+                self.job = {"durum": "calisiyor", "mesaj": "Canlı kayıttan kesiliyor", "satirlar": [], "demo": did,
+                            "oyuncu": None, "kaynak": "canli"}
+            cmd = self.cut_command(path, best, Path(live["dosya"]))
+            threading.Thread(target=self._record, args=(path, best, None, cmd), daemon=True).start()
+            return {"durum": "calisiyor", "oyuncu": None, "kaynak": "canli"}
         if otomatik.kilit_dolu(self.kilit):
             raise ApiError(HTTPStatus.CONFLICT, "Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
         path = self.demo_path(did)
@@ -408,9 +456,10 @@ class App:
             if otomatik.kilit_dolu(self.kilit):
                 raise ApiError(HTTPStatus.CONFLICT, "Otomatik kuyruk şu an kayıt yapıyor; bitince tekrar dene.")
             self.stop_requested = False
-            self.job = {"durum": "calisiyor", "mesaj": "Kayıt başladı", "satirlar": [], "demo": did, "oyuncu": player}
+            self.job = {"durum": "calisiyor", "mesaj": "Kayıt başladı", "satirlar": [], "demo": did, "oyuncu": player,
+                        "kaynak": "cs2"}
         threading.Thread(target=self._record, args=(path, best, player), daemon=True).start()
-        return {"durum": "calisiyor", "oyuncu": player}
+        return {"durum": "calisiyor", "oyuncu": player, "kaynak": "cs2"}
 
     def stop_recording(self, did: str) -> dict:
         """Süren kaydı durdurur: klip.py ve açtığı her şey (csdm, CS2) kapatılır. Biten klipler kalır."""
@@ -428,11 +477,18 @@ class App:
                "--ayarlar", str(self.settings_path)]
         return cmd + [f"--oyuncu={player}"] if player else cmd  # '=' ile: '-' ile başlayan ad bayrak sanılmasın
 
-    def _record(self, path: Path, best: int, player: str | None = None) -> None:
+    def cut_command(self, path: Path, best: int, session: Path) -> list[str]:
+        """Canlı kayıttan kesim komutu (CS2 açılmaz)."""
+        return [sys.executable, str(ROOT / "canli.py"), "--ayarlar", str(self.settings_path), "kes", str(path),
+                "--kayit", str(session), "--en-iyi", str(best)]
+
+    def _record(self, path: Path, best: int, player: str | None = None, cmd: list[str] | None = None) -> None:
+        """cmd verilirse (canlı kayıttan kesim) o çalışır; CS2 açılmadığı için kayıt kilidi alınmaz."""
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", **{otomatik.KILIT_TUTULUYOR: "1"})
-        cmd = self.record_command(path, best, player)
+        lock = contextlib.nullcontext() if cmd is not None else otomatik.kayit_kilidi(self.kilit)
+        cmd = cmd or self.record_command(path, best, player)
         try:
-            with otomatik.kayit_kilidi(self.kilit), subprocess.Popen(
+            with lock, subprocess.Popen(
                     cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
                     text=True, encoding="utf-8", errors="replace",
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as p:
@@ -626,7 +682,10 @@ def make_handler(app: App):
                     player = data.get("oyuncu") or None
                     if player is not None and (not isinstance(player, str) or not player.strip() or len(player) > 64):
                         raise ApiError(HTTPStatus.BAD_REQUEST, "oyuncu bir ad ya da SteamID olmalı.")
-                    return app.start_recording(m.group(1), best, player.strip() if player else None)
+                    source = data.get("kaynak") or "otomatik"
+                    if source not in ("otomatik", "canli", "cs2"):
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "kaynak: otomatik, canli ya da cs2 olmalı.")
+                    return app.start_recording(m.group(1), best, player.strip() if player else None, source)
                 return self.handle_api(start)
             if path == "/api/ayarlar":
                 def save():

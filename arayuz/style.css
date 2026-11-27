@@ -751,6 +751,10 @@ a.btn-ikincil{text-decoration:none}
 .mj-say b{display:block;margin-top:4px;font:700 18px/1.1 var(--f-disp);letter-spacing:.01em;color:var(--text);font-variant-numeric:tabular-nums;text-transform:none}
 .mj-say b small{font-size:12px;color:var(--muted)}
 
+/* ---------- Canlı kayıttan kesim ---------- */
+.canli-bilgi{margin-top:10px;padding:10px 12px;font-size:13.5px;line-height:1.5;color:var(--text);background:rgba(61,220,138,.08);border-left:3px solid var(--iyi)}
+.canli-bilgi b{color:var(--iyi)}
+
 /* ---------- Kariyer (#kariyer) ---------- */
 .renk-orta{color:var(--text)}
 .kr-bant .ei-sayilar b small{font-size:20px;color:var(--muted);margin:0 2px}

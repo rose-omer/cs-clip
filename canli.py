@@ -376,9 +376,28 @@ def kesim_komutu(ffmpeg: Path, ham: Path, bas: float, bit: float, cikti: Path) -
             "-c", "copy", "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", str(cikti)]
 
 
+def eslesen_kayit(demo_yolu: Path, klasor: Path) -> dict | None:
+    """Demoya uyan canlı kayıt: {kayit (oturum .json), video, harita, roundlar (karşılaştırılan), fark}; yoksa None.
+
+    Kayıt klasörü boşsa demo hiç ayrıştırılmaz (arayüz her demo için sorar).
+    """
+    klasor = Path(klasor)
+    if not klasor.is_dir() or not any(klasor.glob("*.json")):
+        return None
+    harita, demo_roundlari = round_baslangiclari(open_demo(demo_yolu))
+    bulunan = oturum_bul(klasor, harita, demo_roundlari)
+    if bulunan is None:
+        return None
+    f, o = bulunan
+    if not f.with_name(o["video"]).is_file():
+        return None
+    fark, n = uyum(o["roundlar"], demo_roundlari)
+    return {"kayit": f, "video": o["video"], "harita": harita, "roundlar": n, "fark": round(fark, 2)}
+
+
 def kes(demo_yolu: Path, cfg: dict, ffmpeg: Path, oturum_dosyasi: Path | None = None, prova: bool = False,
-        calistir=subprocess.run) -> list[Path]:
-    """Demonun en iyi anlarını eşleşen kayıttan keser; kesilen klipleri döner."""
+        calistir=subprocess.run, en_iyi: int | None = None) -> list[Path]:
+    """Demonun en iyi anlarını eşleşen kayıttan keser; kesilen klipleri döner. en_iyi: None = ayardaki sınır."""
     demo = open_demo(demo_yolu)
     harita, demo_roundlari = round_baslangiclari(demo)
     if oturum_dosyasi:
@@ -402,7 +421,7 @@ def kes(demo_yolu: Path, cfg: dict, ffmpeg: Path, oturum_dosyasi: Path | None = 
     # Görüntü kaydı yapanın gözünden: oyuncu GSI'deki SteamID.
     r = analyze_player(demo, oturum["steamid"], cfg["once_sn"], cfg["sonra_sn"], default=cfg["oyuncu"])
     etiket = "" if r["varsayilan"] else player_tag(r["ad"], r["steamid"])
-    klipler = select_clips(r["highlights"], cfg["min_skor"], cfg["mac_basi_en_fazla"])
+    klipler = select_clips(r["highlights"], cfg["min_skor"], cfg["mac_basi_en_fazla"] if en_iyi is None else en_iyi)
     cikti_klasoru = Path(cfg["cikti_klasoru"])
     onek = clip_prefix(harita, demo)
     yazilan = []
@@ -424,6 +443,7 @@ def kes(demo_yolu: Path, cfg: dict, ffmpeg: Path, oturum_dosyasi: Path | None = 
         for (a, b), p in zip(araliklar, parcalar):
             calistir(kesim_komutu(ffmpeg, ham, a, b, p), check=True)
         yazilan.append(join_parts(parcalar, hedef, ffmpeg))
+        print(f"  -> {hedef.name} (kayıttan kesildi)")  # arayüz yazılan klipleri '->' ile sayar
     return yazilan
 
 
@@ -441,6 +461,7 @@ def main() -> None:
     p_kes.add_argument("demo", type=Path)
     p_kes.add_argument("--kayit", type=Path, help="oturum .json dosyası (yoksa demoya uyan bulunur)")
     p_kes.add_argument("--prova", action="store_true", help="kesmeden ne yapılacağını göster")
+    p_kes.add_argument("--en-iyi", type=int, help="en iyi N an (0 = hepsi); yoksa ayardaki mac_basi_en_fazla")
     args = ap.parse_args()
 
     cfg = load_config(args.ayarlar)
@@ -462,7 +483,9 @@ def main() -> None:
     if args.komut == "izle":
         izle(cfg, ffmpeg, csgo_dir, args.sure)
     else:
-        kes(args.demo, cfg, ffmpeg, args.kayit, args.prova)
+        yazilan = kes(args.demo, cfg, ffmpeg, args.kayit, args.prova, en_iyi=args.en_iyi)
+        print()
+        print(f"{len(yazilan)} yeni klip: {Path(cfg['cikti_klasoru']).resolve()}")
 
 
 if __name__ == "__main__":

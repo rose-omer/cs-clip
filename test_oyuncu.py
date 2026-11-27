@@ -225,7 +225,7 @@ def test_record_command_and_post_body(server, demo, monkeypatch):
     done = threading.Event()
     monkeypatch.setattr(a, "_record", lambda *args: (started.append(args), done.set()))  # gerçek kayıt yok
     status, data = post_json(f"{url}/api/demo/{DID}/kaydet", {"en_iyi": 3, "oyuncu": MERT_SID})
-    assert status == 200 and data == {"durum": "calisiyor", "oyuncu": MERT_SID}
+    assert status == 200 and data == {"durum": "calisiyor", "oyuncu": MERT_SID, "kaynak": "cs2"}
     assert done.wait(5)
     assert started[-1][1:] == (3, MERT_SID) and a.job["oyuncu"] == MERT_SID
     cmd = a.record_command(started[-1][0], 3, MERT_SID)

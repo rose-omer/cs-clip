@@ -245,6 +245,8 @@ function kayitBilgi(id) {
     if (/^===/.test(x)) { mesaj = 'Demo hazırlanıyor, highlight\'lar seçiliyor'; }
     else if (/^\[\d+\/\d+\]/.test(x)) { adim = Math.max(adim, 1); mesaj = 'CS2 açılıyor, demo yükleniyor'; }
     else if (/^CSDM'e ekleniyor/i.test(x)) { adim = Math.max(adim, 1); mesaj = "Demo CS Demo Manager'a ekleniyor"; }
+    else if (/^Kayıt: .*round karşılaştırıldı/.test(x)) { adim = Math.max(adim, 2); mesaj = 'Canlı kayıttan kesiliyor (CS2 açılmaz)'; }
+    else if (/^atlandı \(kayıtta yok\)/.test(x)) { mesaj = 'Kayıtta olmayan an atlandı: ' + x.replace(/^atlandı \(kayıtta yok\):\s*/, ''); }
     else if (/^\[csdm\]/.test(x)) { csdm++; adim = Math.max(adim, 2); mesaj = 'Kayıt sürüyor · ' + x.replace(/^\[csdm\]\s*/, ''); }
     else if (/^->\s/.test(x)) { yazilan++; adim = 3; mesaj = 'Klip yazıldı: ' + x.replace(/^->\s*/, ''); }
     else if (/^zaten var:/.test(x)) { yazilan++; adim = Math.max(adim, 2); }
@@ -278,13 +280,23 @@ function kayitCiz() {
   const n = S.enIyi ? Math.min(S.enIyi, hl.length) : hl.length;
   const oy = gosterilen(id);
   const baska = !!(oy && !oy.ben && secOyuncu(id));
+  const canli = !!(k && k.canli && !baska); // maçın canlı kaydı: klipler CS2 açılmadan ondan kesilir
   btn.disabled = !k || calisiyor || S.kayitBasliyor;
-  btn.title = S.aktifIs && S.aktifIs !== id ? 'Başka bir demonun kaydı sürüyor.' : baska ? `${oy.ad} oyuncusunun anları onun gözünden kaydedilir.` : '';
+  btn.title = S.aktifIs && S.aktifIs !== id ? 'Başka bir demonun kaydı sürüyor.' : baska ? `${oy.ad} oyuncusunun anları onun gözünden kaydedilir.`
+    : canli ? 'Klipler bu maçın canlı kaydından kesilir; CS2 açılmaz.' : '';
+  const cb = $('#canliBilgi');
+  if (cb) {
+    cb.hidden = !canli;
+    cb.innerHTML = canli ? `<b>Canlı kayıt bulundu:</b> ${esc(k.canli.video)} · ${k.canli.roundlar + 1} round eşleşti. Klipler bu kayıttan kesilir: <b>CS2 açılmaz</b>, FACEIT açık kalabilir.` : '';
+  }
+  const ac = $('#kayitAciklama');
+  if (ac) ac.hidden = canli;
   btn.classList.toggle('baska', baska);
   const goz = $('#kimGozu');
   if (goz) goz.textContent = baska ? `${oy.ad} oyuncusunun` : 'senin';
   $('#kaydetMetin').textContent = !k ? (S.klipHata[id] ? 'Klipler alınamadı' : 'Yükleniyor…')
-    : S.kayitBasliyor ? 'Başlatılıyor…' : calisiyor ? 'Kayıt sürüyor…' : baska ? 'Bu oyuncunun kliplerini kaydet' : 'Klipleri kaydet';
+    : S.kayitBasliyor ? 'Başlatılıyor…' : calisiyor ? (k.kayit && k.kayit.kaynak === 'canli' ? 'Kesiliyor…' : 'Kayıt sürüyor…')
+      : baska ? 'Bu oyuncunun kliplerini kaydet' : canli ? 'Kayıttan kes' : 'Klipleri kaydet';
   $('#kaydetAlt').textContent = !k || calisiyor || S.kayitBasliyor ? '' : `(${S.enIyi ? 'en iyi ' + n : 'hepsi · ' + n})`;
   $$('#kayitSecim button').forEach((x) => { x.disabled = calisiyor; });
   const il = $('#ilerleme');
@@ -341,10 +353,13 @@ async function kaydet() {
     const sonuc = await api(demoYol(id, '/kaydet'), { method: 'POST', body: JSON.stringify(govde) });
     S.kayitHedef[id] = enIyi;
     delete S.ilerleme[id];
-    k.kayit = { durum: (sonuc && sonuc.durum) || 'calisiyor', mesaj: 'Kayıt başladı', satirlar: [], oyuncu: sid };
+    const kesim = !!(sonuc && sonuc.kaynak === 'canli');
+    k.kayit = { durum: (sonuc && sonuc.durum) || 'calisiyor', mesaj: kesim ? 'Canlı kayıttan kesiliyor' : 'Kayıt başladı', satirlar: [], oyuncu: sid,
+      kaynak: (sonuc && sonuc.kaynak) || 'cs2' };
     S.aktifIs = id;
     S.yoklamaHata = null;
-    bildir(ORNEK_MODU ? 'Örnek mod: kayıt taklit ediliyor.' : 'Kayıt başladı. CS2 açılacak; bitene kadar bilgisayarı kullanma.');
+    bildir(ORNEK_MODU ? 'Örnek mod: kayıt taklit ediliyor.'
+      : kesim ? 'Klipler canlı kayıttan kesiliyor; CS2 açılmayacak.' : 'Kayıt başladı. CS2 açılacak; bitene kadar bilgisayarı kullanma.');
     yoklamaBaslat();
     listeCiz();
   } catch (e) {

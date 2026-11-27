@@ -284,3 +284,19 @@ def test_gecikmeli_durdurma_kaydi_kapatir(tmp_path):
     zamanlayici.join(timeout=5)  # aktif, "q" yazılmadan False olur; durdur() bitene kadar bekle
     assert not zamanlayici.is_alive()
     assert not k.aktif and not k.bitiyor and s.stdin.getvalue() == "q"
+
+
+def test_eslesen_kayit_klasor_bossa_demoyu_ayristirmaz(tmp_path, monkeypatch):
+    monkeypatch.setattr(canli, "round_baslangiclari", lambda demo: pytest.fail("ayrıştırılmamalı"))
+    assert canli.eslesen_kayit(tmp_path / "d.dem", tmp_path / "yok") is None
+    assert canli.eslesen_kayit(tmp_path / "d.dem", tmp_path) is None  # klasör var ama oturum yok
+
+
+def test_eslesen_kayit_video_dosyasi_olan_oturumu_bulur(tmp_path, monkeypatch):
+    monkeypatch.setattr(canli, "open_demo", lambda p: p)
+    monkeypatch.setattr(canli, "round_baslangiclari", lambda demo: ("de_dust2", DEMO))
+    canli.oturum_yaz(tmp_path / "a.json", oturum())
+    assert canli.eslesen_kayit(tmp_path / "d.dem", tmp_path) is None  # video silinmişse kesilecek bir şey yok
+    (tmp_path / "a.mkv").write_bytes(b"v")
+    bulunan = canli.eslesen_kayit(tmp_path / "d.dem", tmp_path)
+    assert bulunan["kayit"] == tmp_path / "a.json" and bulunan["video"] == "a.mkv" and bulunan["roundlar"] == 3
