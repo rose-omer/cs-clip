@@ -64,7 +64,16 @@ def csdm_analyze(tools: dict, demo: Path) -> str | None:
     """Demoyu CSDM veritabanına ekler; hata varsa mesajını döner."""
     print("  CSDM'e ekleniyor…")
     code, lines = run_streaming(analyze_args(tools["csdm"], demo), tools["env"])
-    return (lines[-1] if lines else f"çıkış kodu {code}") if code else None
+    if code:
+        return lines[-1] if lines else f"çıkış kodu {code}"
+    # CSDM okuyamadığı demoda (yeni CS2 sürümü) hata vermeden çıkar ama maçı yazmaz.
+    if not demo_in_db(tools["pg_bin"], tools["db"], demo, tools["env"]):
+        return CSDM_UNREADABLE
+    return None
+
+
+CSDM_UNREADABLE = ("CS Demo Manager bu demoyu okuyamadı (maç veritabanına yazılmadı). Demo CS2'nin yeni bir "
+                   "sürümüyle kaydedilmişse CS Demo Manager'ı güncelle: github.com/akiver/cs-demo-manager/releases")
 
 
 _lock_stack = contextlib.ExitStack()

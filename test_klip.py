@@ -57,3 +57,15 @@ def test_klip_kilidi_tutan_ebeveynden_calisinca_kilit_almaz(tmp_path, monkeypatc
     monkeypatch.setenv(otomatik.KILIT_TUTULUYOR, "1")
     with otomatik.kayit_kilidi(otomatik.KILIT):
         klip.hold_recording_lock()  # hata yok: kilit ebeveynde
+
+
+def test_csdm_analizi_maci_yazmazsa_acik_hata(monkeypatch):
+    """CSDM yeni CS2 demosunu okuyamayınca 0 ile çıkar ama maçı yazmaz: 'Match not found' yerine açık mesaj."""
+    import klip
+
+    tools = {"csdm": Path("csdm"), "env": {}, "pg_bin": Path("pg"), "db": {}}
+    monkeypatch.setattr(klip, "run_streaming", lambda cmd, env=None, timeout=None: (0, ["Analyzing demo ..."]))
+    monkeypatch.setattr(klip, "demo_in_db", lambda *a: False)
+    assert klip.csdm_analyze(tools, Path("d.dem")) == klip.CSDM_UNREADABLE
+    monkeypatch.setattr(klip, "demo_in_db", lambda *a: True)
+    assert klip.csdm_analyze(tools, Path("d.dem")) is None
